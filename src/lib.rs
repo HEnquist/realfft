@@ -2,11 +2,11 @@
 //!
 //! This library is a wrapper for RustFFT that enables faster computations when the input data is real.
 //! It packs a 2*N long real vector into an N long complex vector, which is transformed using a standard FFT.
-//! It then post-processes the result to give only the first half of the complex spectrum, as an N+1 long complex vector. 
-//! 
+//! It then post-processes the result to give only the first half of the complex spectrum, as an N+1 long complex vector.
+//!
 //! The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2*N long real result.
-//! 
-//! Compared to just converting the input to a 2*N long complex vector and using a 2*N long FFT, the the speedup that 
+//!
+//! Compared to just converting the input to a 2*N long complex vector and using a 2*N long FFT, the the speedup that
 //! can be expected in practice is about 50%.  
 //!
 //! ## Documentation
@@ -22,16 +22,16 @@
 //! use realfft::{ComplexToReal, RealToComplex};
 //! use rustfft::num_complex::Complex;
 //! use rustfft::num_traits::Zero;
-//! 
+//!
 //! // make dummy input vector, spectrum and output vectors
 //! let mut indata = vec![0.0f64; 256];
 //! let mut spectrum: Vec<Complex<f64>> = vec![Complex::zero(); 129];
 //! let mut outdata: Vec<f64> = vec![0.0; 256];
-//! 
+//!
 //! //create an FFT and forward transform the input data
 //! let mut r2c = RealToComplex::<f64>::new(256);
 //! r2c.process(&indata, &mut spectrum).unwrap();
-//! 
+//!
 //! // create an iFFT and inverse transform the spectum
 //! let mut c2r = ComplexToReal::<f64>::new(256);
 //! c2r.process(&spectrum, &mut outdata).unwrap();
@@ -41,12 +41,11 @@
 //!
 //! The `realfft` crate requires rustc version 1.xx or newer.
 
-
-use std::error;
-use std::fmt;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
 use rustfft::FFTplanner;
+use std::error;
+use std::fmt;
 
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
@@ -75,7 +74,6 @@ impl FftError {
         }
     }
 }
-
 
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
@@ -125,7 +123,7 @@ macro_rules! impl_r2c {
                 }
             }
 
-            /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector. 
+            /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
             pub fn process(&mut self, input: &[$ft], output: &mut [Complex<$ft>]) -> Res<()> {
                 if input.len() != self.length {
                     return Err(Box::new(FftError::new(
@@ -208,7 +206,7 @@ macro_rules! impl_c2r {
                 }
             }
 
-            /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output. 
+            /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
             pub fn process(&mut self, input: &[Complex<$ft>], output: &mut [$ft]) -> Res<()> {
                 if input.len() != (self.length / 2 + 1) {
                     return Err(Box::new(FftError::new(

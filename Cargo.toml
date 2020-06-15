@@ -3,6 +3,12 @@ name = "realfft"
 version = "0.1.0"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 edition = "2018"
+description = "Real-to-complex FFT and complex-to-real iFFT for Rust"
+license = "MIT"
+repository = "https://github.com/HEnquist/realfft"
+keywords = ["fft", "dft", "discrete", "fourier", "transform"]
+categories = ["algorithms", "compression", "multimedia::encoding", "science"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
