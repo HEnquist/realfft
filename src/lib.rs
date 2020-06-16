@@ -16,6 +16,15 @@
 //! cargo doc --open
 //! ```
 //!
+//! ## Benchmarks
+//!
+//! To run a set of benchmarks comparing real-to-complex FFT with standard complex-to-complex, type:
+//! ```text
+//! cargo bench
+//! ```
+//! The results are printed while running, and are compiled into an html report containing much more details.
+//! To view, open `target/criterion/report/index.html` in a browser.
+//!
 //! ## Example
 //! Transform a vector, and then inverse transform the result.
 //! ```
