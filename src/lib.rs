@@ -29,11 +29,11 @@
 //! let mut outdata: Vec<f64> = vec![0.0; 256];
 //!
 //! //create an FFT and forward transform the input data
-//! let mut r2c = RealToComplex::<f64>::new(256);
+//! let mut r2c = RealToComplex::<f64>::new(256).unwrap();
 //! r2c.process(&indata, &mut spectrum).unwrap();
 //!
 //! // create an iFFT and inverse transform the spectum
-//! let mut c2r = ComplexToReal::<f64>::new(256);
+//! let mut c2r = ComplexToReal::<f64>::new(256).unwrap();
 //! c2r.process(&spectrum, &mut outdata).unwrap();
 //! ```
 //!
@@ -100,8 +100,11 @@ pub struct ComplexToReal<T> {
 macro_rules! impl_r2c {
     ($ft:ty) => {
         impl RealToComplex<$ft> {
-            /// Create a new RealToComplex FFT for input data of a given length. The length mus be even.
-            pub fn new(length: usize) -> Self {
+            /// Create a new RealToComplex FFT for input data of a given length. The length must be even.
+            pub fn new(length: usize) -> Res<Self> {
+                if length % 2 > 0 {
+                    return Err(Box::new(FftError::new("Length must be even")));
+                }
                 let buffer_in = vec![Complex::zero(); length / 2];
                 let buffer_out = vec![Complex::zero(); length / 2 + 1];
                 let mut sin = Vec::with_capacity(length / 2);
@@ -113,14 +116,14 @@ macro_rules! impl_r2c {
                 }
                 let mut fft_planner = FFTplanner::<$ft>::new(false);
                 let fft = fft_planner.plan_fft(length / 2);
-                RealToComplex {
+                Ok(RealToComplex {
                     sin,
                     cos,
                     length,
                     fft,
                     buffer_in,
                     buffer_out,
-                }
+                })
             }
 
             /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
@@ -184,7 +187,10 @@ macro_rules! impl_c2r {
     ($ft:ty) => {
         /// Create a new ComplexToReal iFFT for output data of a given length. The length must be even.
         impl ComplexToReal<$ft> {
-            pub fn new(length: usize) -> Self {
+            pub fn new(length: usize) -> Res<Self> {
+                if length % 2 > 0 {
+                    return Err(Box::new(FftError::new("Length must be even")));
+                }
                 let buffer_in = vec![Complex::zero(); length / 2];
                 let buffer_out = vec![Complex::zero(); length / 2];
                 let mut sin = Vec::with_capacity(length / 2);
@@ -196,14 +202,14 @@ macro_rules! impl_c2r {
                 }
                 let mut fft_planner = FFTplanner::<$ft>::new(true);
                 let fft = fft_planner.plan_fft(length / 2);
-                ComplexToReal {
+                Ok(ComplexToReal {
                     sin,
                     cos,
                     length,
                     fft,
                     buffer_in,
                     buffer_out,
-                }
+                })
             }
 
             /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
@@ -289,7 +295,7 @@ mod tests {
         let mut fft_planner = FFTplanner::<f64>::new(false);
         let fft = fft_planner.plan_fft(256);
 
-        let mut r2c = RealToComplex::<f64>::new(256);
+        let mut r2c = RealToComplex::<f64>::new(256).unwrap();
         let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); 129];
         let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 256];
 
@@ -311,7 +317,7 @@ mod tests {
         let mut fft_planner = FFTplanner::<f64>::new(true);
         let fft = fft_planner.plan_fft(256);
 
-        let mut c2r = ComplexToReal::<f64>::new(256);
+        let mut c2r = ComplexToReal::<f64>::new(256).unwrap();
         let mut out_a: Vec<f64> = vec![0.0; 256];
         let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 256];
 
