@@ -49,7 +49,7 @@ use std::fmt;
 
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
-/// Custom error returned by resamplers
+/// Custom error returned by FFTs
 #[derive(Debug)]
 pub struct FftError {
     desc: String,
@@ -100,7 +100,7 @@ pub struct ComplexToReal<T> {
 macro_rules! impl_r2c {
     ($ft:ty) => {
         impl RealToComplex<$ft> {
-            /// Create a new RealToComplex FFT for input data of a given length. The length must be even.
+            /// Create a new RealToComplex FFT for input data of a given length. Returns an error if the length is not even.
             pub fn new(length: usize) -> Res<Self> {
                 if length % 2 > 0 {
                     return Err(Box::new(FftError::new("Length must be even")));
@@ -185,7 +185,7 @@ impl_r2c!(f32);
 
 macro_rules! impl_c2r {
     ($ft:ty) => {
-        /// Create a new ComplexToReal iFFT for output data of a given length. The length must be even.
+        /// Create a new ComplexToReal iFFT for output data of a given length. Returns an error if the length is not even.
         impl ComplexToReal<$ft> {
             pub fn new(length: usize) -> Res<Self> {
                 if length % 2 > 0 {
