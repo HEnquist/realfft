@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion
 extern crate realfft;
 extern crate rustfft;
 
-
 use realfft::RealToComplex;
 use rustfft::num_complex::Complex;
 
