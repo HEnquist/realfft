@@ -39,7 +39,7 @@
 //!
 //! ## Compatibility
 //!
-//! The `realfft` crate requires rustc version 1.xx or newer.
+//! The `realfft` crate requires rustc version 1.34 or newer.
 
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
@@ -322,6 +322,52 @@ mod tests {
         let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 256];
 
         c2r.process(&indata[0..129], &mut out_a).unwrap();
+        fft.process(&mut indata, &mut out_b);
+
+        let out_b_r = out_b.iter().map(|val| 0.5 * val.re).collect::<Vec<f64>>();
+        assert!(compare_f64(&out_a, &out_b_r, 1.0e-9));
+    }
+
+    // Compare RealToComplex with standard FFT
+    #[test]
+    fn real_to_complex_odd() {
+        let mut indata = vec![0.0f64; 254];
+        indata[0] = 1.0;
+        indata[3] = 0.5;
+        let mut indata_c = indata
+            .iter()
+            .map(|val| Complex::from(val))
+            .collect::<Vec<Complex<f64>>>();
+        let mut fft_planner = FFTplanner::<f64>::new(false);
+        let fft = fft_planner.plan_fft(254);
+
+        let mut r2c = RealToComplex::<f64>::new(254).unwrap();
+        let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); 128];
+        let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 254];
+
+        fft.process(&mut indata_c, &mut out_b);
+        r2c.process(&indata, &mut out_a).unwrap();
+        assert!(compare_complex(&out_a[0..128], &out_b[0..128], 1.0e-9));
+    }
+
+    // Compare ComplexToReal with standard iFFT
+    #[test]
+    fn complex_to_real_odd() {
+        let mut indata = vec![Complex::<f64>::zero(); 254];
+        indata[0] = Complex::new(1.0, 0.0);
+        indata[1] = Complex::new(1.0, 0.4);
+        indata[253] = Complex::new(1.0, -0.4);
+        indata[3] = Complex::new(0.3, 0.2);
+        indata[251] = Complex::new(0.3, -0.2);
+
+        let mut fft_planner = FFTplanner::<f64>::new(true);
+        let fft = fft_planner.plan_fft(254);
+
+        let mut c2r = ComplexToReal::<f64>::new(254).unwrap();
+        let mut out_a: Vec<f64> = vec![0.0; 254];
+        let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 254];
+
+        c2r.process(&indata[0..128], &mut out_a).unwrap();
         fft.process(&mut indata, &mut out_b);
 
         let out_b_r = out_b.iter().map(|val| 0.5 * val.re).collect::<Vec<f64>>();
