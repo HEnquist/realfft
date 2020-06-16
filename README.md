@@ -41,6 +41,6 @@ c2r.process(&spectrum, &mut outdata).unwrap();
 
 ### Compatibility
 
-The `realfft` crate requires rustc version 1.xx or newer.
+The `realfft` crate requires rustc version 1.34 or newer.
 
 License: MIT
