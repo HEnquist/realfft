@@ -3,13 +3,15 @@
 Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 
 This library is a wrapper for RustFFT that enables faster computations when the input data is real.
-It packs a 2*N long real vector into an N long complex vector, which is transformed using a standard FFT.
+It packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
 It then post-processes the result to give only the first half of the complex spectrum, as an N+1 long complex vector.
 
-The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2*N long real result.
+The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
 
-Compared to just converting the input to a 2*N long complex vector and using a 2*N long FFT, the the speedup that
-can be expected in practice is about a factor 2.
+The speed increase compared to just converting the input to a 2N long complex vector
+and using a 2N long FFT depends on the length f the input data.
+The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
+The difference shrinks for shorter lengths, and around 100 elements there is no longer any difference.
 
 ### Documentation
 

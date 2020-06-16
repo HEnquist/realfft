@@ -38,7 +38,7 @@ fn bench_realfft(b: &mut Bencher, len: usize) {
 
 fn bench_pow2(c: &mut Criterion) {
     let mut group = c.benchmark_group("Powers of 2");
-    for i in [64, 256, 65536].iter() {
+    for i in [64, 128, 256, 512, 4096, 65536].iter() {
         group.bench_with_input(BenchmarkId::new("Complex", i), i, |b, i| bench_fft(b, *i));
         group.bench_with_input(BenchmarkId::new("Real", i), i, |b, i| bench_realfft(b, *i));
     }
