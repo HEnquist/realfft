@@ -9,7 +9,7 @@ It then post-processes the result to give only the first half of the complex spe
 The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2*N long real result.
 
 Compared to just converting the input to a 2*N long complex vector and using a 2*N long FFT, the the speedup that
-can be expected in practice is about 50%.
+can be expected in practice is about a factor 2.
 
 ### Documentation
 
