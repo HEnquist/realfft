@@ -133,7 +133,7 @@ macro_rules! impl_r2c {
                 })
             }
 
-            /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector. 
+            /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
             /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
             pub fn process(&mut self, input: &mut [$ft], output: &mut [Complex<$ft>]) -> Res<()> {
                 if input.len() != self.length {
@@ -163,9 +163,8 @@ macro_rules! impl_r2c {
                 let mut buf_in = unsafe {
                     let ptr = input.as_mut_ptr() as *mut Complex<$ft>;
                     let len = input.len();
-                    std::slice::from_raw_parts_mut(ptr, len/2)
+                    std::slice::from_raw_parts_mut(ptr, len / 2)
                 };
-
 
                 // FFT and store result in buffer_out
                 self.fft
@@ -265,7 +264,7 @@ macro_rules! impl_c2r {
                 let mut buf_out = unsafe {
                     let ptr = output.as_mut_ptr() as *mut Complex<$ft>;
                     let len = output.len();
-                    std::slice::from_raw_parts_mut(ptr, len/2)
+                    std::slice::from_raw_parts_mut(ptr, len / 2)
                 };
                 self.fft.process(&mut self.buffer_in, &mut buf_out);
 
