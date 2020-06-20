@@ -133,7 +133,8 @@ macro_rules! impl_r2c {
                 })
             }
 
-            /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+            /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector. 
+            /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
             pub fn process(&mut self, input: &mut [$ft], output: &mut [Complex<$ft>]) -> Res<()> {
                 if input.len() != self.length {
                     return Err(Box::new(FftError::new(
