@@ -43,7 +43,7 @@ let mut outdata: Vec<f64> = vec![0.0; 256];
 
 //create an FFT and forward transform the input data
 let mut r2c = RealToComplex::<f64>::new(256).unwrap();
-r2c.process(&indata, &mut spectrum).unwrap();
+r2c.process(&mut indata, &mut spectrum).unwrap();
 
 // create an iFFT and inverse transform the spectum
 let mut c2r = ComplexToReal::<f64>::new(256).unwrap();

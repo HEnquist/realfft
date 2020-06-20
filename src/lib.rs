@@ -41,7 +41,7 @@
 //!
 //! //create an FFT and forward transform the input data
 //! let mut r2c = RealToComplex::<f64>::new(256).unwrap();
-//! r2c.process(&indata, &mut spectrum).unwrap();
+//! r2c.process(&mut indata, &mut spectrum).unwrap();
 //!
 //! // create an iFFT and inverse transform the spectum
 //! let mut c2r = ComplexToReal::<f64>::new(256).unwrap();
@@ -93,7 +93,6 @@ pub struct RealToComplex<T> {
     cos: Vec<T>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::FFT<T>>,
-    buffer_in: Vec<Complex<T>>,
     buffer_out: Vec<Complex<T>>,
 }
 
@@ -105,7 +104,6 @@ pub struct ComplexToReal<T> {
     length: usize,
     fft: std::sync::Arc<dyn rustfft::FFT<T>>,
     buffer_in: Vec<Complex<T>>,
-    buffer_out: Vec<Complex<T>>,
 }
 
 macro_rules! impl_r2c {
@@ -116,7 +114,6 @@ macro_rules! impl_r2c {
                 if length % 2 > 0 {
                     return Err(Box::new(FftError::new("Length must be even")));
                 }
-                let buffer_in = vec![Complex::zero(); length / 2];
                 let buffer_out = vec![Complex::zero(); length / 2 + 1];
                 let mut sin = Vec::with_capacity(length / 2);
                 let mut cos = Vec::with_capacity(length / 2);
@@ -132,13 +129,12 @@ macro_rules! impl_r2c {
                     cos,
                     length,
                     fft,
-                    buffer_in,
                     buffer_out,
                 })
             }
 
             /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
-            pub fn process(&mut self, input: &[$ft], output: &mut [Complex<$ft>]) -> Res<()> {
+            pub fn process(&mut self, input: &mut [$ft], output: &mut [Complex<$ft>]) -> Res<()> {
                 if input.len() != self.length {
                     return Err(Box::new(FftError::new(
                         format!(
@@ -160,13 +156,19 @@ macro_rules! impl_r2c {
                     )));
                 }
                 let fftlen = self.length / 2;
-                for (val, buf) in input.chunks(2).take(fftlen).zip(self.buffer_in.iter_mut()) {
-                    *buf = Complex::new(val[0], val[1]);
-                }
+                //for (val, buf) in input.chunks(2).take(fftlen).zip(self.buffer_in.iter_mut()) {
+                //    *buf = Complex::new(val[0], val[1]);
+                //}
+                let mut buf_in = unsafe {
+                    let ptr = input.as_mut_ptr() as *mut Complex<$ft>;
+                    let len = input.len();
+                    std::slice::from_raw_parts_mut(ptr, len/2)
+                };
+
 
                 // FFT and store result in buffer_out
                 self.fft
-                    .process(&mut self.buffer_in, &mut self.buffer_out[0..fftlen]);
+                    .process(&mut buf_in, &mut self.buffer_out[0..fftlen]);
 
                 self.buffer_out[fftlen] = self.buffer_out[0];
 
@@ -203,7 +205,6 @@ macro_rules! impl_c2r {
                     return Err(Box::new(FftError::new("Length must be even")));
                 }
                 let buffer_in = vec![Complex::zero(); length / 2];
-                let buffer_out = vec![Complex::zero(); length / 2];
                 let mut sin = Vec::with_capacity(length / 2);
                 let mut cos = Vec::with_capacity(length / 2);
                 let pi = std::f64::consts::PI as $ft;
@@ -219,7 +220,6 @@ macro_rules! impl_c2r {
                     length,
                     fft,
                     buffer_in,
-                    buffer_out,
                 })
             }
 
@@ -260,12 +260,18 @@ macro_rules! impl_c2r {
                 }
 
                 // FFT and store result in buffer_out
-                self.fft.process(&mut self.buffer_in, &mut self.buffer_out);
 
-                for (val, out) in self.buffer_out.iter().zip(output.chunks_mut(2)) {
-                    out[0] = val.re;
-                    out[1] = val.im;
-                }
+                let mut buf_out = unsafe {
+                    let ptr = output.as_mut_ptr() as *mut Complex<$ft>;
+                    let len = output.len();
+                    std::slice::from_raw_parts_mut(ptr, len/2)
+                };
+                self.fft.process(&mut self.buffer_in, &mut buf_out);
+
+                //for (val, out) in self.buffer_out.iter().zip(output.chunks_mut(2)) {
+                //    out[0] = val.re;
+                //    out[1] = val.im;
+                //}
                 Ok(())
             }
         }
@@ -311,7 +317,7 @@ mod tests {
         let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 256];
 
         fft.process(&mut indata_c, &mut out_b);
-        r2c.process(&indata, &mut out_a).unwrap();
+        r2c.process(&mut indata, &mut out_a).unwrap();
         assert!(compare_complex(&out_a[0..129], &out_b[0..129], 1.0e-9));
     }
 
@@ -357,7 +363,7 @@ mod tests {
         let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 254];
 
         fft.process(&mut indata_c, &mut out_b);
-        r2c.process(&indata, &mut out_a).unwrap();
+        r2c.process(&mut indata, &mut out_a).unwrap();
         assert!(compare_complex(&out_a[0..128], &out_b[0..128], 1.0e-9));
     }
 
