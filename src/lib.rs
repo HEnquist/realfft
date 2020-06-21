@@ -260,18 +260,12 @@ macro_rules! impl_c2r {
                 }
 
                 // FFT and store result in buffer_out
-
                 let mut buf_out = unsafe {
                     let ptr = output.as_mut_ptr() as *mut Complex<$ft>;
                     let len = output.len();
                     std::slice::from_raw_parts_mut(ptr, len / 2)
                 };
                 self.fft.process(&mut self.buffer_in, &mut buf_out);
-
-                //for (val, out) in self.buffer_out.iter().zip(output.chunks_mut(2)) {
-                //    out[0] = val.re;
-                //    out[1] = val.im;
-                //}
                 Ok(())
             }
         }
