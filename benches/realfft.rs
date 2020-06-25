@@ -25,7 +25,7 @@ fn bench_fft(b: &mut Bencher, len: usize) {
 fn bench_realfft(b: &mut Bencher, len: usize) {
     let mut fft = RealToComplex::<f64>::new(len).unwrap();
 
-    let signal = vec![0_f64; len];
+    let mut signal = vec![0_f64; len];
     let mut spectrum = vec![
         Complex {
             re: 0_f64,
@@ -33,7 +33,7 @@ fn bench_realfft(b: &mut Bencher, len: usize) {
         };
         len / 2 + 1
     ];
-    b.iter(|| fft.process(&signal, &mut spectrum));
+    b.iter(|| fft.process(&mut signal, &mut spectrum));
 }
 
 fn bench_pow2(c: &mut Criterion) {
