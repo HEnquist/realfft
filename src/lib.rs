@@ -98,8 +98,7 @@ pub struct RealToComplex<T> {
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
 pub struct ComplexToReal<T> {
-    sin: Vec<T>,
-    cos: Vec<T>,
+    sin_cos: Vec<(T, T)>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::FFT<T>>,
     buffer_in: Vec<Complex<T>>,
@@ -220,18 +219,17 @@ macro_rules! impl_c2r {
                     return Err(Box::new(FftError::new("Length must be even")));
                 }
                 let buffer_in = vec![Complex::zero(); length / 2];
-                let mut sin = Vec::with_capacity(length / 2);
-                let mut cos = Vec::with_capacity(length / 2);
+                let mut sin_cos = Vec::with_capacity(length / 2);
                 let pi = std::f64::consts::PI as $ft;
                 for k in 0..length / 2 {
-                    sin.push((k as $ft * pi / (length / 2) as $ft).sin());
-                    cos.push((k as $ft * pi / (length / 2) as $ft).cos());
+                    let sin = (k as $ft * pi / (length / 2) as $ft).sin();
+                    let cos = (k as $ft * pi / (length / 2) as $ft).cos();
+                    sin_cos.push((sin, cos));
                 }
                 let mut fft_planner = FFTplanner::<$ft>::new(true);
                 let fft = fft_planner.plan_fft(length / 2);
                 Ok(ComplexToReal {
-                    sin,
-                    cos,
+                    sin_cos,
                     length,
                     fft,
                     buffer_in,
@@ -260,18 +258,21 @@ macro_rules! impl_c2r {
                         .as_str(),
                     )));
                 }
-                let fftlen = self.length / 2;
 
-                for k in 0..fftlen {
+                for (&buf, &buf_rev, &(sin, cos), fft_input) in zip4(
+                    input,
+                    input.iter().rev(),
+                    &self.sin_cos,
+                    &mut self.buffer_in[..],
+                ) {
                     let xr = 0.5
-                        * ((input[k].re + input[fftlen - k].re)
-                            - self.cos[k] * (input[k].im + input[fftlen - k].im)
-                            - self.sin[k] * (input[k].re - input[fftlen - k].re));
+                        * ((buf.re + buf_rev.re)
+                            - cos * (buf.im + buf_rev.im)
+                            - sin * (buf.re - buf_rev.re));
                     let xi = 0.5
-                        * ((input[k].im - input[fftlen - k].im)
-                            + self.cos[k] * (input[k].re - input[fftlen - k].re)
-                            - self.sin[k] * (input[k].im + input[fftlen - k].im));
-                    self.buffer_in[k] = Complex::new(xr, xi);
+                        * ((buf.im - buf_rev.im) + cos * (buf.re - buf_rev.re)
+                            - sin * (buf.im + buf_rev.im));
+                    *fft_input = Complex::new(xr, xi);
                 }
 
                 // FFT and store result in buffer_out
