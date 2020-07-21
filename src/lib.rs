@@ -89,8 +89,7 @@ impl FftError {
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
 pub struct RealToComplex<T> {
-    sin: Vec<T>,
-    cos: Vec<T>,
+    sin_cos: Vec<(T, T)>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::FFT<T>>,
     buffer_out: Vec<Complex<T>>,
@@ -106,23 +105,21 @@ pub struct ComplexToReal<T> {
     buffer_in: Vec<Complex<T>>,
 }
 
-fn zip5<A, B, C, D, E>(
+fn zip4<A, B, C, D>(
     a: A,
     b: B,
     c: C,
     d: D,
-    e: E,
-) -> impl Iterator<Item = (A::Item, B::Item, C::Item, D::Item, E::Item)>
+) -> impl Iterator<Item = (A::Item, B::Item, C::Item, D::Item)>
 where
     A: IntoIterator,
     B: IntoIterator,
     C: IntoIterator,
     D: IntoIterator,
-    E: IntoIterator,
 {
     a.into_iter()
-        .zip(b.into_iter().zip(c.into_iter().zip(d.into_iter().zip(e))))
-        .map(|(v, (w, (x, (y, z))))| (v, w, x, y, z))
+        .zip(b.into_iter().zip(c.into_iter().zip(d)))
+        .map(|(w, (x, (y, z)))| (w, x, y, z))
 }
 
 macro_rules! impl_r2c {
@@ -134,18 +131,17 @@ macro_rules! impl_r2c {
                     return Err(Box::new(FftError::new("Length must be even")));
                 }
                 let buffer_out = vec![Complex::zero(); length / 2 + 1];
-                let mut sin = Vec::with_capacity(length / 2);
-                let mut cos = Vec::with_capacity(length / 2);
+                let mut sin_cos = Vec::with_capacity(length / 2);
                 let pi = std::f64::consts::PI as $ft;
                 for k in 0..length / 2 {
-                    sin.push((k as $ft * pi / (length / 2) as $ft).sin());
-                    cos.push((k as $ft * pi / (length / 2) as $ft).cos());
+                    let sin = (k as $ft * pi / (length / 2) as $ft).sin();
+                    let cos = (k as $ft * pi / (length / 2) as $ft).cos();
+                    sin_cos.push((sin, cos));
                 }
                 let mut fft_planner = FFTplanner::<$ft>::new(false);
                 let fft = fft_planner.plan_fft(length / 2);
                 Ok(RealToComplex {
-                    sin,
-                    cos,
+                    sin_cos,
                     length,
                     fft,
                     buffer_out,
@@ -191,11 +187,10 @@ macro_rules! impl_r2c {
 
                 self.buffer_out[fftlen] = self.buffer_out[0];
 
-                for (&buf, &buf_rev, &sin, &cos, out) in zip5(
+                for (&buf, &buf_rev, &(sin, cos), out) in zip4(
                     &self.buffer_out,
                     self.buffer_out.iter().rev(),
-                    &self.sin,
-                    &self.cos,
+                    &self.sin_cos,
                     &mut output[..],
                 ) {
                     let xr = 0.5
