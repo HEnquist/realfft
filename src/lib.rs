@@ -106,6 +106,25 @@ pub struct ComplexToReal<T> {
     buffer_in: Vec<Complex<T>>,
 }
 
+fn zip5<A, B, C, D, E>(
+    a: A,
+    b: B,
+    c: C,
+    d: D,
+    e: E,
+) -> impl Iterator<Item = (A::Item, B::Item, C::Item, D::Item, E::Item)>
+where
+    A: IntoIterator,
+    B: IntoIterator,
+    C: IntoIterator,
+    D: IntoIterator,
+    E: IntoIterator,
+{
+    a.into_iter()
+        .zip(b.into_iter().zip(c.into_iter().zip(d.into_iter().zip(e))))
+        .map(|(v, (w, (x, (y, z))))| (v, w, x, y, z))
+}
+
 macro_rules! impl_r2c {
     ($ft:ty) => {
         impl RealToComplex<$ft> {
@@ -172,20 +191,21 @@ macro_rules! impl_r2c {
 
                 self.buffer_out[fftlen] = self.buffer_out[0];
 
-                for k in 0..fftlen {
+                for (&buf, &buf_rev, &sin, &cos, out) in zip5(
+                    &self.buffer_out,
+                    self.buffer_out.iter().rev(),
+                    &self.sin,
+                    &self.cos,
+                    &mut output[..],
+                ) {
                     let xr = 0.5
-                        * ((self.buffer_out[k].re + self.buffer_out[fftlen - k].re)
-                            + self.cos[k]
-                                * (self.buffer_out[k].im + self.buffer_out[fftlen - k].im)
-                            - self.sin[k]
-                                * (self.buffer_out[k].re - self.buffer_out[fftlen - k].re));
+                        * ((buf.re + buf_rev.re) + cos * (buf.im + buf_rev.im)
+                            - sin * (buf.re - buf_rev.re));
                     let xi = 0.5
-                        * ((self.buffer_out[k].im - self.buffer_out[fftlen - k].im)
-                            - self.sin[k]
-                                * (self.buffer_out[k].im + self.buffer_out[fftlen - k].im)
-                            - self.cos[k]
-                                * (self.buffer_out[k].re - self.buffer_out[fftlen - k].re));
-                    output[k] = Complex::new(xr, xi);
+                        * ((buf.im - buf_rev.im)
+                            - sin * (buf.im + buf_rev.im)
+                            - cos * (buf.re - buf_rev.re));
+                    *out = Complex::new(xr, xi);
                 }
                 output[fftlen] = Complex::new(self.buffer_out[0].re - self.buffer_out[0].im, 0.0);
                 Ok(())
