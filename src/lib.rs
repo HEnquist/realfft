@@ -1,4 +1,4 @@
-//! Real-to-complex FFT and complex-to-real iFFT based on RustFFT
+//! # RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 //!
 //! This library is a wrapper for RustFFT that enables faster computations when the input data is real.
 //! It packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
@@ -10,6 +10,47 @@
 //! and using a 2N long FFT depends on the length f the input data.
 //! The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
 //! The difference shrinks for shorter lengths, and around 100 elements there is no longer any difference.  
+//!
+//! ## Why use real-to-complex fft?
+//! ### Using a complex-to-complex fft
+//! A simple way to get the fft of a rea values vector is to convert it to complex, and using a complex-to-complex fft.
+//!
+//! Let's assume `x` is a 6 element long real vector:
+//! ```text
+//! x = [x0r, x1r, x2r, x3r, x4r, x5r]
+//! ```
+//!
+//! Converted to complex, using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
+//! ```text
+//! x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0, (x5r, 0)]
+//! ```
+//!
+//!
+//! The general result of `X = FFT(x)` is:
+//! ```text
+//! X = [(X0r, X0i), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X4r, X4i), (X5r, X5i)]
+//! ```
+//!
+//! However, because our `x` was real-valued, some of this is redundant:
+//! ```text
+//! FFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, 0), (X2r, -X2i), (X1r, -X1i)]
+//! ```
+//!
+//! As we can see, the output contains a fair bit of redundant data. But it still takes time for the FFT to calculate these values. Converting the input data to complex also takes a little bit of time.
+//!
+//! ### real-to-complex
+//! Using a real-to-complex fft removes the need for converting the input data to complex.
+//! It also avoids caclulating the redundant output values.
+//!
+//! The result is:
+//! ```text
+//! RealFFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, 0)]
+//! ```
+//!
+//! This is the data layout output by the real-to-complex fft, and the one expected as input to the complex-to-real ifft.
+//!
+//! ## Scaling
+//! RealFFT matches the behaviour of RustFFT and does not normalize the output of either FFT of iFFT. To get normalized results, each element must be scaled by `1/sqrt(length)`. If the processing involves both an FFT and an iFFT step, it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
 //!
 //! ## Documentation
 //!
@@ -50,11 +91,11 @@
 //!
 //! ## Compatibility
 //!
-//! The `realfft` crate requires rustc version 1.34 or newer.
+//! The `realfft` crate requires rustc version 1.37 or newer.
 
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
-use rustfft::FFTplanner;
+use rustfft::FftPlanner;
 use std::error;
 use std::fmt;
 
@@ -91,8 +132,9 @@ impl FftError {
 pub struct RealToComplex<T> {
     sin_cos: Vec<(T, T)>,
     length: usize,
-    fft: std::sync::Arc<dyn rustfft::FFT<T>>,
+    fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     buffer_out: Vec<Complex<T>>,
+    scratch: Vec<Complex<T>>,
 }
 
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
@@ -100,8 +142,9 @@ pub struct RealToComplex<T> {
 pub struct ComplexToReal<T> {
     sin_cos: Vec<(T, T)>,
     length: usize,
-    fft: std::sync::Arc<dyn rustfft::FFT<T>>,
+    fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     buffer_in: Vec<Complex<T>>,
+    scratch: Vec<Complex<T>>,
 }
 
 fn zip4<A, B, C, D>(
@@ -137,13 +180,15 @@ macro_rules! impl_r2c {
                     let cos = (k as $ft * pi / (length / 2) as $ft).cos();
                     sin_cos.push((sin, cos));
                 }
-                let mut fft_planner = FFTplanner::<$ft>::new(false);
-                let fft = fft_planner.plan_fft(length / 2);
+                let mut fft_planner = FftPlanner::<$ft>::new();
+                let fft = fft_planner.plan_fft_forward(length / 2);
+                let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
                 Ok(RealToComplex {
                     sin_cos,
                     length,
                     fft,
                     buffer_out,
+                    scratch,
                 })
             }
 
@@ -181,8 +226,11 @@ macro_rules! impl_r2c {
                 };
 
                 // FFT and store result in buffer_out
-                self.fft
-                    .process(&mut buf_in, &mut self.buffer_out[0..fftlen]);
+                self.fft.process_outofplace_with_scratch(
+                    &mut buf_in,
+                    &mut self.buffer_out[0..fftlen],
+                    &mut self.scratch,
+                );
 
                 self.buffer_out[fftlen] = self.buffer_out[0];
 
@@ -226,13 +274,15 @@ macro_rules! impl_c2r {
                     let cos = (k as $ft * pi / (length / 2) as $ft).cos();
                     sin_cos.push((sin, cos));
                 }
-                let mut fft_planner = FFTplanner::<$ft>::new(true);
-                let fft = fft_planner.plan_fft(length / 2);
+                let mut fft_planner = FftPlanner::<$ft>::new();
+                let fft = fft_planner.plan_fft_inverse(length / 2);
+                let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
                 Ok(ComplexToReal {
                     sin_cos,
                     length,
                     fft,
                     buffer_in,
+                    scratch,
                 })
             }
 
@@ -265,13 +315,11 @@ macro_rules! impl_c2r {
                     &self.sin_cos,
                     &mut self.buffer_in[..],
                 ) {
-                    let xr = 0.5
-                        * ((buf.re + buf_rev.re)
-                            - cos * (buf.im + buf_rev.im)
-                            - sin * (buf.re - buf_rev.re));
-                    let xi = 0.5
-                        * ((buf.im - buf_rev.im) + cos * (buf.re - buf_rev.re)
-                            - sin * (buf.im + buf_rev.im));
+                    let xr = (buf.re + buf_rev.re)
+                        - cos * (buf.im + buf_rev.im)
+                        - sin * (buf.re - buf_rev.re);
+                    let xi = (buf.im - buf_rev.im) + cos * (buf.re - buf_rev.re)
+                        - sin * (buf.im + buf_rev.im);
                     *fft_input = Complex::new(xr, xi);
                 }
 
@@ -281,7 +329,11 @@ macro_rules! impl_c2r {
                     let len = output.len();
                     std::slice::from_raw_parts_mut(ptr, len / 2)
                 };
-                self.fft.process(&mut self.buffer_in, &mut buf_out);
+                self.fft.process_outofplace_with_scratch(
+                    &mut self.buffer_in,
+                    &mut buf_out,
+                    &mut self.scratch,
+                );
                 Ok(())
             }
         }
@@ -295,7 +347,7 @@ mod tests {
     use crate::{ComplexToReal, RealToComplex};
     use rustfft::num_complex::Complex;
     use rustfft::num_traits::Zero;
-    use rustfft::FFTplanner;
+    use rustfft::FftPlanner;
 
     fn compare_complex(a: &[Complex<f64>], b: &[Complex<f64>], tol: f64) -> bool {
         a.iter().zip(b.iter()).fold(true, |eq, (val_a, val_b)| {
@@ -313,22 +365,26 @@ mod tests {
     #[test]
     fn real_to_complex() {
         let mut indata = vec![0.0f64; 256];
-        indata[0] = 1.0;
-        indata[3] = 0.5;
-        let mut indata_c = indata
+        for (i, val) in indata.iter_mut().enumerate() {
+            *val = i as f64;
+        }
+        let mut rustfft_check = indata
             .iter()
             .map(|val| Complex::from(val))
             .collect::<Vec<Complex<f64>>>();
-        let mut fft_planner = FFTplanner::<f64>::new(false);
-        let fft = fft_planner.plan_fft(256);
+        let mut fft_planner = FftPlanner::<f64>::new();
+        let fft = fft_planner.plan_fft_forward(256);
 
         let mut r2c = RealToComplex::<f64>::new(256).unwrap();
         let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); 129];
-        let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 256];
 
-        fft.process(&mut indata_c, &mut out_b);
+        fft.process(&mut rustfft_check);
         r2c.process(&mut indata, &mut out_a).unwrap();
-        assert!(compare_complex(&out_a[0..129], &out_b[0..129], 1.0e-9));
+        assert!(compare_complex(
+            &out_a[0..129],
+            &rustfft_check[0..129],
+            1.0e-9
+        ));
     }
 
     // Compare ComplexToReal with standard iFFT
@@ -340,19 +396,19 @@ mod tests {
         indata[255] = Complex::new(1.0, -0.4);
         indata[3] = Complex::new(0.3, 0.2);
         indata[253] = Complex::new(0.3, -0.2);
+        let mut rustfft_check = indata.clone();
 
-        let mut fft_planner = FFTplanner::<f64>::new(true);
-        let fft = fft_planner.plan_fft(256);
+        let mut fft_planner = FftPlanner::<f64>::new();
+        let fft = fft_planner.plan_fft_inverse(256);
 
         let mut c2r = ComplexToReal::<f64>::new(256).unwrap();
         let mut out_a: Vec<f64> = vec![0.0; 256];
-        let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 256];
 
         c2r.process(&indata[0..129], &mut out_a).unwrap();
-        fft.process(&mut indata, &mut out_b);
+        fft.process(&mut rustfft_check);
 
-        let out_b_r = out_b.iter().map(|val| 0.5 * val.re).collect::<Vec<f64>>();
-        assert!(compare_f64(&out_a, &out_b_r, 1.0e-9));
+        let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
+        assert!(compare_f64(&out_a, &check_real, 1.0e-9));
     }
 
     // Compare RealToComplex with standard FFT
@@ -361,20 +417,23 @@ mod tests {
         let mut indata = vec![0.0f64; 254];
         indata[0] = 1.0;
         indata[3] = 0.5;
-        let mut indata_c = indata
+        let mut rustfft_check = indata
             .iter()
             .map(|val| Complex::from(val))
             .collect::<Vec<Complex<f64>>>();
-        let mut fft_planner = FFTplanner::<f64>::new(false);
-        let fft = fft_planner.plan_fft(254);
+        let mut fft_planner = FftPlanner::<f64>::new();
+        let fft = fft_planner.plan_fft_forward(254);
 
         let mut r2c = RealToComplex::<f64>::new(254).unwrap();
         let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); 128];
-        let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 254];
 
-        fft.process(&mut indata_c, &mut out_b);
+        fft.process(&mut rustfft_check);
         r2c.process(&mut indata, &mut out_a).unwrap();
-        assert!(compare_complex(&out_a[0..128], &out_b[0..128], 1.0e-9));
+        assert!(compare_complex(
+            &out_a[0..128],
+            &rustfft_check[0..128],
+            1.0e-9
+        ));
     }
 
     // Compare ComplexToReal with standard iFFT
@@ -386,18 +445,17 @@ mod tests {
         indata[253] = Complex::new(1.0, -0.4);
         indata[3] = Complex::new(0.3, 0.2);
         indata[251] = Complex::new(0.3, -0.2);
+        let mut rustfft_check = indata.clone();
 
-        let mut fft_planner = FFTplanner::<f64>::new(true);
-        let fft = fft_planner.plan_fft(254);
+        let mut fft_planner = FftPlanner::<f64>::new();
+        let fft = fft_planner.plan_fft_inverse(254);
 
         let mut c2r = ComplexToReal::<f64>::new(254).unwrap();
         let mut out_a: Vec<f64> = vec![0.0; 254];
-        let mut out_b: Vec<Complex<f64>> = vec![Complex::zero(); 254];
 
         c2r.process(&indata[0..128], &mut out_a).unwrap();
-        fft.process(&mut indata, &mut out_b);
-
-        let out_b_r = out_b.iter().map(|val| 0.5 * val.re).collect::<Vec<f64>>();
-        assert!(compare_f64(&out_a, &out_b_r, 1.0e-9));
+        fft.process(&mut rustfft_check);
+        let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
+        assert!(compare_f64(&out_a[0..128], &check_real[0..128], 1.0e-9));
     }
 }

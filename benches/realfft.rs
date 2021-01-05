@@ -8,8 +8,9 @@ use rustfft::num_complex::Complex;
 /// Times just the FFT execution (not allocation and pre-calculation)
 /// for a given length
 fn bench_fft(b: &mut Bencher, len: usize) {
-    let mut planner = rustfft::FFTplanner::new(false);
-    let fft = planner.plan_fft(len);
+    let mut planner = rustfft::FftPlanner::new();
+    let fft = planner.plan_fft_forward(len);
+    let mut scratch = vec![Complex::from(0.0); fft.get_outofplace_scratch_len()];
 
     let mut signal = vec![
         Complex {
@@ -19,7 +20,7 @@ fn bench_fft(b: &mut Bencher, len: usize) {
         len
     ];
     let mut spectrum = signal.clone();
-    b.iter(|| fft.process(&mut signal, &mut spectrum));
+    b.iter(|| fft.process_outofplace_with_scratch(&mut signal, &mut spectrum, &mut scratch));
 }
 
 fn bench_realfft(b: &mut Bencher, len: usize) {
