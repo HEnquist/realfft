@@ -70,7 +70,7 @@ To view, open `target/criterion/report/index.html` in a browser.
 
 ## Example
 Transform a vector, and then inverse transform the result.
-```
+```rust
 use realfft::{ComplexToReal, RealToComplex};
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
