@@ -135,6 +135,7 @@ pub struct RealToComplex<T> {
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     buffer_out: Vec<Complex<T>>,
     scratch: Vec<Complex<T>>,
+    is_even: bool,
 }
 
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
@@ -145,6 +146,7 @@ pub struct ComplexToReal<T> {
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     buffer_in: Vec<Complex<T>>,
     scratch: Vec<Complex<T>>,
+    is_even: bool,
 }
 
 fn zip4<A, B, C, D>(
@@ -170,26 +172,41 @@ macro_rules! impl_r2c {
             /// Create a new RealToComplex FFT for input data of a given length. Returns an error if the length is not even.
             pub fn new(length: usize) -> Res<Self> {
                 if length % 2 > 0 {
-                    return Err(Box::new(FftError::new("Length must be even")));
+                    let buffer_out = vec![Complex::zero(); length];
+                    let sin_cos = Vec::new();
+                    let mut fft_planner = FftPlanner::<$ft>::new();
+                    let fft = fft_planner.plan_fft_forward(length);
+                    let scratch = vec![Complex::zero(); fft.get_inplace_scratch_len()];
+                    Ok(RealToComplex {
+                        sin_cos,
+                        length,
+                        fft,
+                        buffer_out,
+                        scratch,
+                        is_even: false,
+                    })
                 }
-                let buffer_out = vec![Complex::zero(); length / 2 + 1];
-                let mut sin_cos = Vec::with_capacity(length / 2);
-                let pi = std::f64::consts::PI as $ft;
-                for k in 0..length / 2 {
-                    let sin = (k as $ft * pi / (length / 2) as $ft).sin();
-                    let cos = (k as $ft * pi / (length / 2) as $ft).cos();
-                    sin_cos.push((sin, cos));
+                else {
+                    let buffer_out = vec![Complex::zero(); length / 2 + 1];
+                    let mut sin_cos = Vec::with_capacity(length / 2);
+                    let pi = std::f64::consts::PI as $ft;
+                    for k in 0..length / 2 {
+                        let sin = (k as $ft * pi / (length / 2) as $ft).sin();
+                        let cos = (k as $ft * pi / (length / 2) as $ft).cos();
+                        sin_cos.push((sin, cos));
+                    }
+                    let mut fft_planner = FftPlanner::<$ft>::new();
+                    let fft = fft_planner.plan_fft_forward(length / 2);
+                    let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
+                    Ok(RealToComplex {
+                        sin_cos,
+                        length,
+                        fft,
+                        buffer_out,
+                        scratch,
+                        is_even: true,
+                    })
                 }
-                let mut fft_planner = FftPlanner::<$ft>::new();
-                let fft = fft_planner.plan_fft_forward(length / 2);
-                let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
-                Ok(RealToComplex {
-                    sin_cos,
-                    length,
-                    fft,
-                    buffer_out,
-                    scratch,
-                })
             }
 
             /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
@@ -215,41 +232,57 @@ macro_rules! impl_r2c {
                         .as_str(),
                     )));
                 }
-                let fftlen = self.length / 2;
-                //for (val, buf) in input.chunks(2).take(fftlen).zip(self.buffer_in.iter_mut()) {
-                //    *buf = Complex::new(val[0], val[1]);
-                //}
-                let mut buf_in = unsafe {
-                    let ptr = input.as_mut_ptr() as *mut Complex<$ft>;
-                    let len = input.len();
-                    std::slice::from_raw_parts_mut(ptr, len / 2)
-                };
+                if self.is_even {
+                    let fftlen = self.length / 2;
+                    //for (val, buf) in input.chunks(2).take(fftlen).zip(self.buffer_in.iter_mut()) {
+                    //    *buf = Complex::new(val[0], val[1]);
+                    //}
+                    let mut buf_in = unsafe {
+                        let ptr = input.as_mut_ptr() as *mut Complex<$ft>;
+                        let len = input.len();
+                        std::slice::from_raw_parts_mut(ptr, len / 2)
+                    };
 
-                // FFT and store result in buffer_out
-                self.fft.process_outofplace_with_scratch(
-                    &mut buf_in,
-                    &mut self.buffer_out[0..fftlen],
-                    &mut self.scratch,
-                );
+                    // FFT and store result in buffer_out
+                    self.fft.process_outofplace_with_scratch(
+                        &mut buf_in,
+                        &mut self.buffer_out[0..fftlen],
+                        &mut self.scratch,
+                    );
 
-                self.buffer_out[fftlen] = self.buffer_out[0];
+                    self.buffer_out[fftlen] = self.buffer_out[0];
 
-                for (&buf, &buf_rev, &(sin, cos), out) in zip4(
-                    &self.buffer_out,
-                    self.buffer_out.iter().rev(),
-                    &self.sin_cos,
-                    &mut output[..],
-                ) {
-                    let xr = 0.5
-                        * ((buf.re + buf_rev.re) + cos * (buf.im + buf_rev.im)
-                            - sin * (buf.re - buf_rev.re));
-                    let xi = 0.5
-                        * ((buf.im - buf_rev.im)
-                            - sin * (buf.im + buf_rev.im)
-                            - cos * (buf.re - buf_rev.re));
-                    *out = Complex::new(xr, xi);
+                    for (&buf, &buf_rev, &(sin, cos), out) in zip4(
+                        &self.buffer_out,
+                        self.buffer_out.iter().rev(),
+                        &self.sin_cos,
+                        &mut output[..],
+                    ) {
+                        let xr = 0.5
+                            * ((buf.re + buf_rev.re) + cos * (buf.im + buf_rev.im)
+                                - sin * (buf.re - buf_rev.re));
+                        let xi = 0.5
+                            * ((buf.im - buf_rev.im)
+                                - sin * (buf.im + buf_rev.im)
+                                - cos * (buf.re - buf_rev.re));
+                        *out = Complex::new(xr, xi);
+                    }
+                    output[fftlen] = Complex::new(self.buffer_out[0].re - self.buffer_out[0].im, 0.0);
                 }
-                output[fftlen] = Complex::new(self.buffer_out[0].re - self.buffer_out[0].im, 0.0);
+                else {
+                    for (val, buf) in input.iter().zip(self.buffer_out.iter_mut()) {
+                        *buf = Complex::new(*val, 0.0);
+                    }
+
+                    // FFT and store result in buffer_out
+                    self.fft.process_with_scratch(
+                        &mut self.buffer_out,
+                        &mut self.scratch,
+                    );
+                    for (val, buf) in self.buffer_out.iter().take(self.length/2 + 1).zip(output.iter_mut()) {
+                        *buf = *val;
+                    }
+                }
                 Ok(())
             }
         }
@@ -264,26 +297,41 @@ macro_rules! impl_c2r {
         impl ComplexToReal<$ft> {
             pub fn new(length: usize) -> Res<Self> {
                 if length % 2 > 0 {
-                    return Err(Box::new(FftError::new("Length must be even")));
+                    let buffer_in = vec![Complex::zero(); length];
+                    let sin_cos = Vec::new();
+                    let mut fft_planner = FftPlanner::<$ft>::new();
+                    let fft = fft_planner.plan_fft_inverse(length);
+                    let scratch = vec![Complex::zero(); fft.get_inplace_scratch_len()];
+                    Ok(ComplexToReal {
+                        sin_cos,
+                        length,
+                        fft,
+                        buffer_in,
+                        scratch,
+                        is_even: false,
+                    })
                 }
-                let buffer_in = vec![Complex::zero(); length / 2];
-                let mut sin_cos = Vec::with_capacity(length / 2);
-                let pi = std::f64::consts::PI as $ft;
-                for k in 0..length / 2 {
-                    let sin = (k as $ft * pi / (length / 2) as $ft).sin();
-                    let cos = (k as $ft * pi / (length / 2) as $ft).cos();
-                    sin_cos.push((sin, cos));
+                else {
+                    let buffer_in = vec![Complex::zero(); length / 2];
+                    let mut sin_cos = Vec::with_capacity(length / 2);
+                    let pi = std::f64::consts::PI as $ft;
+                    for k in 0..length / 2 {
+                        let sin = (k as $ft * pi / (length / 2) as $ft).sin();
+                        let cos = (k as $ft * pi / (length / 2) as $ft).cos();
+                        sin_cos.push((sin, cos));
+                    }
+                    let mut fft_planner = FftPlanner::<$ft>::new();
+                    let fft = fft_planner.plan_fft_inverse(length / 2);
+                    let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
+                    Ok(ComplexToReal {
+                        sin_cos,
+                        length,
+                        fft,
+                        buffer_in,
+                        scratch,
+                        is_even: true,
+                    })
                 }
-                let mut fft_planner = FftPlanner::<$ft>::new();
-                let fft = fft_planner.plan_fft_inverse(length / 2);
-                let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
-                Ok(ComplexToReal {
-                    sin_cos,
-                    length,
-                    fft,
-                    buffer_in,
-                    scratch,
-                })
             }
 
             /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
@@ -308,32 +356,48 @@ macro_rules! impl_c2r {
                         .as_str(),
                     )));
                 }
+                if self.is_even {
+                    for (&buf, &buf_rev, &(sin, cos), fft_input) in zip4(
+                        input,
+                        input.iter().rev(),
+                        &self.sin_cos,
+                        &mut self.buffer_in[..],
+                    ) {
+                        let xr = (buf.re + buf_rev.re)
+                            - cos * (buf.im + buf_rev.im)
+                            - sin * (buf.re - buf_rev.re);
+                        let xi = (buf.im - buf_rev.im) + cos * (buf.re - buf_rev.re)
+                            - sin * (buf.im + buf_rev.im);
+                        *fft_input = Complex::new(xr, xi);
+                    }
 
-                for (&buf, &buf_rev, &(sin, cos), fft_input) in zip4(
-                    input,
-                    input.iter().rev(),
-                    &self.sin_cos,
-                    &mut self.buffer_in[..],
-                ) {
-                    let xr = (buf.re + buf_rev.re)
-                        - cos * (buf.im + buf_rev.im)
-                        - sin * (buf.re - buf_rev.re);
-                    let xi = (buf.im - buf_rev.im) + cos * (buf.re - buf_rev.re)
-                        - sin * (buf.im + buf_rev.im);
-                    *fft_input = Complex::new(xr, xi);
+                    // FFT and store result in buffer_out
+                    let mut buf_out = unsafe {
+                        let ptr = output.as_mut_ptr() as *mut Complex<$ft>;
+                        let len = output.len();
+                        std::slice::from_raw_parts_mut(ptr, len / 2)
+                    };
+                    self.fft.process_outofplace_with_scratch(
+                        &mut self.buffer_in,
+                        &mut buf_out,
+                        &mut self.scratch,
+                    );
                 }
-
-                // FFT and store result in buffer_out
-                let mut buf_out = unsafe {
-                    let ptr = output.as_mut_ptr() as *mut Complex<$ft>;
-                    let len = output.len();
-                    std::slice::from_raw_parts_mut(ptr, len / 2)
-                };
-                self.fft.process_outofplace_with_scratch(
-                    &mut self.buffer_in,
-                    &mut buf_out,
-                    &mut self.scratch,
-                );
+                else {
+                    for (val, buf) in input.iter().zip(self.buffer_in.iter_mut()) {
+                        *buf = *val;
+                    }
+                    for (buf, val) in self.buffer_in.iter_mut().rev().take(self.length/2).zip(input.iter().skip(1)) {
+                        *buf = val.conj();
+                    }
+                    self.fft.process_with_scratch(
+                        &mut self.buffer_in,
+                        &mut self.scratch,
+                    );
+                    for (val, buf) in self.buffer_in.iter().zip(output.iter_mut()) {
+                        *buf = val.re;
+                    }
+                }
                 Ok(())
             }
         }
@@ -361,101 +425,65 @@ mod tests {
             .fold(true, |eq, (val_a, val_b)| eq && (val_a - val_b).abs() < tol)
     }
 
-    // Compare RealToComplex with standard FFT
-    #[test]
-    fn real_to_complex() {
-        let mut indata = vec![0.0f64; 256];
-        for (i, val) in indata.iter_mut().enumerate() {
-            *val = i as f64;
-        }
-        let mut rustfft_check = indata
-            .iter()
-            .map(|val| Complex::from(val))
-            .collect::<Vec<Complex<f64>>>();
-        let mut fft_planner = FftPlanner::<f64>::new();
-        let fft = fft_planner.plan_fft_forward(256);
-
-        let mut r2c = RealToComplex::<f64>::new(256).unwrap();
-        let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); 129];
-
-        fft.process(&mut rustfft_check);
-        r2c.process(&mut indata, &mut out_a).unwrap();
-        assert!(compare_complex(
-            &out_a[0..129],
-            &rustfft_check[0..129],
-            1.0e-9
-        ));
-    }
-
     // Compare ComplexToReal with standard iFFT
     #[test]
     fn complex_to_real() {
-        let mut indata = vec![Complex::<f64>::zero(); 256];
-        indata[0] = Complex::new(1.0, 0.0);
-        indata[1] = Complex::new(1.0, 0.4);
-        indata[255] = Complex::new(1.0, -0.4);
-        indata[3] = Complex::new(0.3, 0.2);
-        indata[253] = Complex::new(0.3, -0.2);
-        let mut rustfft_check = indata.clone();
+        for length in 5..7 {
+            let mut indata: Vec<Complex<f64>> = vec![Complex::zero(); length/2+1];
+            let mut rustfft_check: Vec<Complex<f64>> = vec![Complex::zero(); length];
+            for (n, val) in indata.iter_mut().enumerate() {
+                *val = Complex::new(n as f64, (2*n) as f64);
+            }
+            indata[0].im = 0.0;
+            if length%2==0 {
+                indata[length/2].im = 0.0;
+            }
+            for (val_long, val) in rustfft_check.iter_mut().take(length/2+1).zip(indata.iter()) {
+                *val_long = *val;
+            }
+            for (val_long, val) in rustfft_check.iter_mut().rev().take(length/2).zip(indata.iter().skip(1)) {
+                *val_long = val.conj();
+            }
+            println!("{:?}", indata);
+            println!("{:?}", rustfft_check);
+            let mut fft_planner = FftPlanner::<f64>::new();
+            let fft = fft_planner.plan_fft_inverse(length);
 
-        let mut fft_planner = FftPlanner::<f64>::new();
-        let fft = fft_planner.plan_fft_inverse(256);
+            let mut c2r = ComplexToReal::<f64>::new(length).unwrap();
+            let mut out_a: Vec<f64> = vec![0.0; length];
+            c2r.process(&indata, &mut out_a).unwrap();
+            fft.process(&mut rustfft_check);
 
-        let mut c2r = ComplexToReal::<f64>::new(256).unwrap();
-        let mut out_a: Vec<f64> = vec![0.0; 256];
-
-        c2r.process(&indata[0..129], &mut out_a).unwrap();
-        fft.process(&mut rustfft_check);
-
-        let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
-        assert!(compare_f64(&out_a, &check_real, 1.0e-9));
+            let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
+            assert!(compare_f64(&out_a, &check_real, 1.0e-9));
+        }
     }
 
     // Compare RealToComplex with standard FFT
     #[test]
-    fn real_to_complex_odd() {
-        let mut indata = vec![0.0f64; 254];
-        indata[0] = 1.0;
-        indata[3] = 0.5;
-        let mut rustfft_check = indata
-            .iter()
-            .map(|val| Complex::from(val))
-            .collect::<Vec<Complex<f64>>>();
-        let mut fft_planner = FftPlanner::<f64>::new();
-        let fft = fft_planner.plan_fft_forward(254);
+    fn real_to_complex() {
+        for length in 2..64 {
+            let mut indata = vec![0.0f64; length];
+            for (n, val) in indata.iter_mut().enumerate() {
+                *val = n as f64;
+            }
+            let mut rustfft_check = indata
+                .iter()
+                .map(|val| Complex::from(val))
+                .collect::<Vec<Complex<f64>>>();
+            let mut fft_planner = FftPlanner::<f64>::new();
+            let fft = fft_planner.plan_fft_forward(length);
 
-        let mut r2c = RealToComplex::<f64>::new(254).unwrap();
-        let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); 128];
+            let mut r2c = RealToComplex::<f64>::new(length).unwrap();
+            let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); length/2+1];
 
-        fft.process(&mut rustfft_check);
-        r2c.process(&mut indata, &mut out_a).unwrap();
-        assert!(compare_complex(
-            &out_a[0..128],
-            &rustfft_check[0..128],
-            1.0e-9
-        ));
-    }
-
-    // Compare ComplexToReal with standard iFFT
-    #[test]
-    fn complex_to_real_odd() {
-        let mut indata = vec![Complex::<f64>::zero(); 254];
-        indata[0] = Complex::new(1.0, 0.0);
-        indata[1] = Complex::new(1.0, 0.4);
-        indata[253] = Complex::new(1.0, -0.4);
-        indata[3] = Complex::new(0.3, 0.2);
-        indata[251] = Complex::new(0.3, -0.2);
-        let mut rustfft_check = indata.clone();
-
-        let mut fft_planner = FftPlanner::<f64>::new();
-        let fft = fft_planner.plan_fft_inverse(254);
-
-        let mut c2r = ComplexToReal::<f64>::new(254).unwrap();
-        let mut out_a: Vec<f64> = vec![0.0; 254];
-
-        c2r.process(&indata[0..128], &mut out_a).unwrap();
-        fft.process(&mut rustfft_check);
-        let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
-        assert!(compare_f64(&out_a[0..128], &check_real[0..128], 1.0e-9));
-    }
+            fft.process(&mut rustfft_check);
+            r2c.process(&mut indata, &mut out_a).unwrap();
+            assert!(compare_complex(
+                &out_a,
+                &rustfft_check[0..(length/2+1)],
+                1.0e-9
+            ));
+        }
+    }   
 }

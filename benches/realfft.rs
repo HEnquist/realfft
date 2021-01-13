@@ -55,6 +55,15 @@ fn bench_pow7(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_pow2, bench_pow7);
+fn bench_range(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Range 123-135");
+    for i in 123..136 {
+        group.bench_with_input(BenchmarkId::new("Complex", i), &i, |b, i| bench_fft(b, *i));
+        group.bench_with_input(BenchmarkId::new("Real", i), &i, |b, i| bench_realfft(b, *i));
+    }
+    group.finish();
+}
+
+criterion_group!(benches, bench_pow2, bench_pow7, bench_range);
 
 criterion_main!(benches);
