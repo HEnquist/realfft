@@ -85,26 +85,38 @@
 //! use rustfft::num_complex::Complex;
 //! use rustfft::num_traits::Zero;
 //!
-//! // make dummy input vector, spectrum and output vectors
-//! let mut indata = vec![0.0f64; 256];
-//! let mut spectrum: Vec<Complex<f64>> = vec![Complex::zero(); 129];
-//! let mut outdata: Vec<f64> = vec![0.0; 256];
+//! let length = 256;
 //!
 //! // make a planner
 //! let mut real_planner = RealFftPlanner::<f64>::new();
 //!
-//! //create an FFT and forward transform the input data
-//! let r2c = real_planner.plan_fft_forward(256);
+//! // create an FFT
+//! let r2c = real_planner.plan_fft_forward(length);
+//! // make input and output vectors
+//! let mut indata = r2c.make_input_vec();
+//! let mut spectrum = r2c.make_output_vec();
+//!
+//! // Are they the length we expect?
+//! assert_eq!(indata.len(), length);
+//! assert_eq!(spectrum.len(), length/2+1);
+//!
+//! // Forward transform the input data
 //! r2c.process(&mut indata, &mut spectrum).unwrap();
 //!
-//! // create an iFFT and inverse transform the spectum
-//! let c2r = real_planner.plan_fft_inverse(256);
+//! // create an iFFT and an output vector
+//! let c2r = real_planner.plan_fft_inverse(length);
+//! let mut outdata = c2r.make_output_vec();
+//! assert_eq!(outdata.len(), length);
+//!
 //! c2r.process(&mut spectrum, &mut outdata).unwrap();
 //! ```
 //!
 //! ## Compatibility
 //!
 //! The `realfft` crate requires rustc version 1.37 or newer.
+
+pub use rustfft::num_complex;
+pub use rustfft::num_traits;
 
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
@@ -179,6 +191,7 @@ struct ComplexToRealEven<T> {
 
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
+#[allow(clippy::len_without_is_empty)]
 pub trait RealToComplex<T> {
     /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
@@ -197,10 +210,23 @@ pub trait RealToComplex<T> {
 
     /// Get the length of the scratch space needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
+
+    /// Get the number of points that this FFT can process.
+    fn len(&self) -> usize;
+
+    /// Convenience method to make an input vector of the right type and length.
+    fn make_input_vec(&self) -> Vec<T>;
+
+    /// Convenience method to make an output vector of the right type and length.
+    fn make_output_vec(&self) -> Vec<Complex<T>>;
+
+    /// Convenience method to make a scratch vector of the right type and length.
+    fn make_scratch_vec(&self) -> Vec<Complex<T>>;
 }
 
 /// An FFT that takes a complex-valued input vector of length N+1 and transforms it to a complex
 /// spectrum of length 2*N.
+#[allow(clippy::len_without_is_empty)]
 pub trait ComplexToReal<T> {
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
@@ -219,6 +245,18 @@ pub trait ComplexToReal<T> {
 
     /// Get the length of the scratch space needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
+
+    /// Get the number of points that this FFT can process.
+    fn len(&self) -> usize;
+
+    /// Convenience method to make an input vector of the right type and length.
+    fn make_input_vec(&self) -> Vec<Complex<T>>;
+
+    /// Convenience method to make an output vector of the right type and length.
+    fn make_output_vec(&self) -> Vec<T>;
+
+    /// Convenience method to make a scratch vector of the right type and length.
+    fn make_scratch_vec(&self) -> Vec<Complex<T>>;
 }
 
 pub fn zip3<A, B, C>(a: A, b: B, c: C) -> impl Iterator<Item = (A::Item, B::Item, C::Item)>
@@ -253,8 +291,8 @@ impl<T: FftNum> RealFftPlanner<T> {
 
     /// Plan a Real-to-Complex forward FFT.
     pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
-        if self.r2c_cache.contains_key(&len) {
-            Arc::clone(self.r2c_cache.get(&len).unwrap())
+        if let Some(fft) = self.r2c_cache.get(&len) {
+            Arc::clone(&fft)
         } else {
             let fft = if len % 2 > 0 {
                 Arc::new(RealToComplexOdd::new(len, &mut self.planner)) as Arc<dyn RealToComplex<T>>
@@ -269,8 +307,8 @@ impl<T: FftNum> RealFftPlanner<T> {
 
     /// Plan a Complex-to-Real inverse FFT.
     pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
-        if self.c2r_cache.contains_key(&len) {
-            Arc::clone(self.c2r_cache.get(&len).unwrap())
+        if let Some(fft) = self.c2r_cache.get(&len) {
+            Arc::clone(&fft)
         } else {
             let fft = if len % 2 > 0 {
                 Arc::new(ComplexToRealOdd::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
@@ -312,7 +350,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.  
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
-        let mut scratch = vec![Complex::zero(); self.scratch_len];
+        let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
@@ -369,6 +407,22 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     fn get_scratch_len(&self) -> usize {
         self.scratch_len
     }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+
+    fn make_input_vec(&self) -> Vec<T> {
+        vec![T::zero(); self.len()]
+    }
+
+    fn make_output_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.len() / 2 + 1]
+    }
+
+    fn make_scratch_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.get_scratch_len()]
+    }
 }
 
 impl<T: FftNum> RealToComplexEven<T> {
@@ -403,7 +457,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.  
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
-        let mut scratch = vec![Complex::zero(); self.scratch_len];
+        let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
@@ -528,6 +582,22 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
     fn get_scratch_len(&self) -> usize {
         self.scratch_len
     }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+
+    fn make_input_vec(&self) -> Vec<T> {
+        vec![T::zero(); self.len()]
+    }
+
+    fn make_output_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.len() / 2 + 1]
+    }
+
+    fn make_scratch_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.get_scratch_len()]
+    }
 }
 
 impl<T: FftNum> ComplexToRealOdd<T> {
@@ -553,7 +623,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
-        let mut scratch = vec![Complex::zero(); self.scratch_len];
+        let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
@@ -619,6 +689,22 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     fn get_scratch_len(&self) -> usize {
         self.scratch_len
     }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+
+    fn make_input_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.len() / 2 + 1]
+    }
+
+    fn make_output_vec(&self) -> Vec<T> {
+        vec![T::zero(); self.len()]
+    }
+
+    fn make_scratch_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.get_scratch_len()]
+    }
 }
 
 impl<T: FftNum> ComplexToRealEven<T> {
@@ -652,7 +738,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
-        let mut scratch = vec![Complex::zero(); self.scratch_len];
+        let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
@@ -772,6 +858,22 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     fn get_scratch_len(&self) -> usize {
         self.scratch_len
     }
+
+    fn len(&self) -> usize {
+        self.length
+    }
+
+    fn make_input_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.len() / 2 + 1]
+    }
+
+    fn make_output_vec(&self) -> Vec<T> {
+        vec![T::zero(); self.len()]
+    }
+
+    fn make_scratch_vec(&self) -> Vec<Complex<T>> {
+        vec![Complex::zero(); self.get_scratch_len()]
+    }
 }
 
 #[cfg(test)]
@@ -810,7 +912,10 @@ mod tests {
     #[test]
     fn complex_to_real() {
         for length in 1..1000 {
-            let mut indata: Vec<Complex<f64>> = vec![Complex::zero(); length / 2 + 1];
+            let mut real_planner = RealFftPlanner::<f64>::new();
+            let c2r = real_planner.plan_fft_inverse(length);
+            let mut out_a = c2r.make_output_vec();
+            let mut indata = c2r.make_input_vec();
             let mut rustfft_check: Vec<Complex<f64>> = vec![Complex::zero(); length];
             let mut rng = rand::thread_rng();
             for val in indata.iter_mut() {
@@ -838,9 +943,6 @@ mod tests {
             let mut fft_planner = FftPlanner::<f64>::new();
             let fft = fft_planner.plan_fft_inverse(length);
 
-            let mut real_planner = RealFftPlanner::<f64>::new();
-            let c2r = real_planner.plan_fft_inverse(length);
-            let mut out_a: Vec<f64> = vec![0.0; length];
             c2r.process(&mut indata, &mut out_a).unwrap();
             fft.process(&mut rustfft_check);
 
@@ -859,7 +961,10 @@ mod tests {
     #[test]
     fn real_to_complex() {
         for length in 1..1000 {
-            let mut indata = vec![0.0f64; length];
+            let mut real_planner = RealFftPlanner::<f64>::new();
+            let r2c = real_planner.plan_fft_forward(length);
+            let mut out_a = r2c.make_output_vec();
+            let mut indata = r2c.make_input_vec();
             let mut rng = rand::thread_rng();
             for val in indata.iter_mut() {
                 *val = rng.gen::<f64>();
@@ -870,10 +975,6 @@ mod tests {
                 .collect::<Vec<Complex<f64>>>();
             let mut fft_planner = FftPlanner::<f64>::new();
             let fft = fft_planner.plan_fft_forward(length);
-
-            let mut real_planner = RealFftPlanner::<f64>::new();
-            let r2c = real_planner.plan_fft_forward(length);
-            let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); length / 2 + 1];
 
             fft.process(&mut rustfft_check);
             r2c.process(&mut indata, &mut out_a).unwrap();
