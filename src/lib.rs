@@ -94,7 +94,7 @@
 //! The `realfft` crate requires rustc version 1.37 or newer.
 
 use rustfft::num_complex::Complex;
-use rustfft::num_traits::Zero;
+use rustfft::num_traits::{Zero, Float};
 use rustfft::FftPlanner;
 use std::error;
 use std::fmt;
@@ -127,10 +127,22 @@ impl FftError {
     }
 }
 
+fn compute_twiddle<T: Float>(
+    index: usize,
+    fft_len: usize,
+) -> Complex<T> {
+    let constant = -2f64 * std::f64::consts::PI / fft_len as f64;
+    let angle = constant * index as f64;
+    Complex {
+        re: T::from(angle.cos()).unwrap(),
+        im: T::from(angle.sin()).unwrap(),
+    }
+}
+
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
 pub struct RealToComplex<T> {
-    sin_cos: Vec<(T, T)>,
+    twiddles: Vec<Complex<T>>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     buffer_out: Vec<Complex<T>>,
@@ -166,6 +178,17 @@ where
         .map(|(w, (x, (y, z)))| (w, x, y, z))
 }
 
+pub fn zip3<A, B, C>(a: A, b: B, c: C) -> impl Iterator<Item = (A::Item, B::Item, C::Item)>
+where
+    A: IntoIterator,
+    B: IntoIterator,
+    C: IntoIterator,
+{
+    a.into_iter()
+        .zip(b.into_iter().zip(c))
+        .map(|(x, (y, z))| (x, y, z))
+}
+
 macro_rules! impl_r2c {
     ($ft:ty) => {
         impl RealToComplex<$ft> {
@@ -173,12 +196,12 @@ macro_rules! impl_r2c {
             pub fn new(length: usize) -> Res<Self> {
                 if length % 2 > 0 {
                     let buffer_out = vec![Complex::zero(); length];
-                    let sin_cos = Vec::new();
+                    let twiddles = Vec::new();
                     let mut fft_planner = FftPlanner::<$ft>::new();
                     let fft = fft_planner.plan_fft_forward(length);
                     let scratch = vec![Complex::zero(); fft.get_inplace_scratch_len()];
                     Ok(RealToComplex {
-                        sin_cos,
+                        twiddles,
                         length,
                         fft,
                         buffer_out,
@@ -188,18 +211,19 @@ macro_rules! impl_r2c {
                 }
                 else {
                     let buffer_out = vec![Complex::zero(); length / 2 + 1];
-                    let mut sin_cos = Vec::with_capacity(length / 2);
-                    let pi = std::f64::consts::PI as $ft;
-                    for k in 0..length / 2 {
-                        let sin = (k as $ft * pi / (length / 2) as $ft).sin();
-                        let cos = (k as $ft * pi / (length / 2) as $ft).cos();
-                        sin_cos.push((sin, cos));
-                    }
+                    let twiddle_count = if length % 4 == 0 {
+                        length / 4
+                    } else {
+                        length / 4 + 1
+                    };
+                    let twiddles: Vec<Complex<$ft>> = (1..twiddle_count)
+                        .map(|i| compute_twiddle(i, length) * 0.5)
+                        .collect();
                     let mut fft_planner = FftPlanner::<$ft>::new();
                     let fft = fft_planner.plan_fft_forward(length / 2);
                     let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
                     Ok(RealToComplex {
-                        sin_cos,
+                        twiddles,
                         length,
                         fft,
                         buffer_out,
@@ -244,44 +268,90 @@ macro_rules! impl_r2c {
                     };
 
                     // FFT and store result in buffer_out
+                    #[cfg(not(feature = "dummyfft"))]
                     self.fft.process_outofplace_with_scratch(
                         &mut buf_in,
-                        &mut self.buffer_out[0..fftlen],
+                        &mut output[0..fftlen],
                         &mut self.scratch,
                     );
+                    let (mut output_left, mut output_right) = output.split_at_mut(output.len() / 2);
 
-                    self.buffer_out[fftlen] = self.buffer_out[0];
-
-                    for (&buf, &buf_rev, &(sin, cos), out) in zip4(
-                        &self.buffer_out,
-                        self.buffer_out.iter().rev(),
-                        &self.sin_cos,
-                        &mut output[..],
-                    ) {
-                        let xr = 0.5
-                            * ((buf.re + buf_rev.re) + cos * (buf.im + buf_rev.im)
-                                - sin * (buf.re - buf_rev.re));
-                        let xi = 0.5
-                            * ((buf.im - buf_rev.im)
-                                - sin * (buf.im + buf_rev.im)
-                                - cos * (buf.re - buf_rev.re));
-                        *out = Complex::new(xr, xi);
+                    // The first and last element don't require any twiddle factors, so skip that work
+                    match (output_left.first_mut(), output_right.last_mut()) {
+                        (Some(first_element), Some(last_element)) => {
+                            // The first and last elements are just a sum and difference of the first value's real and imaginary values
+                            let first_value = *first_element;
+                            *first_element = Complex {
+                                re: first_value.re + first_value.im,
+                                im: 0.0,
+                            };
+                            *last_element = Complex {
+                                re: first_value.re - first_value.im,
+                                im: 0.0,
+                            };
+            
+                            // Chop the first and last element off of our slices so that the loop below doesn't have to deal with them
+                            output_left = &mut output_left[1..];
+                            let right_len = output_right.len();
+                            output_right = &mut output_right[..right_len - 1];
+                        }
+                        _ => {
+                            return Ok(());
+                        }
                     }
-                    output[fftlen] = Complex::new(self.buffer_out[0].re - self.buffer_out[0].im, 0.0);
+                    // Loop over the remaining elements and apply twiddle factors on them
+                    for (twiddle, out, out_rev) in zip3(
+                        self.twiddles.iter(),
+                        output_left.iter_mut(),
+                        output_right.iter_mut().rev(),
+                    ) {
+                        let sum = *out + *out_rev;
+                        let diff = *out - *out_rev;
+                        // Apply twiddle factors. Theoretically we'd have to load 2 separate twiddle factors here, one for the beginning
+                        // and one for the end. But the twiddle factor for the end is jsut the twiddle for the beginning, with the
+                        // real part negated. Since it's the same twiddle, we can factor out a ton of math ops and cut the number of
+                        // multiplications in half
+                        let twiddled_re_sum = sum * twiddle.re;
+                        let twiddled_im_sum = sum * twiddle.im;
+                        let twiddled_re_diff = diff * twiddle.re;
+                        let twiddled_im_diff = diff * twiddle.im;
+                        let half_sum_re = 0.5 * sum.re;
+                        let half_diff_im = 0.5 * diff.im;
+                    
+                        let output_twiddled_real = twiddled_re_sum.im + twiddled_im_diff.re;
+                        let output_twiddled_im = twiddled_im_sum.im - twiddled_re_diff.re;
+                    
+                        // We finally have all the data we need to write the transformed data back out where we found it
+                        *out = Complex {
+                            re: half_sum_re + output_twiddled_real,
+                            im: half_diff_im + output_twiddled_im,
+                        };
+                    
+                        *out_rev = Complex {
+                            re: half_sum_re - output_twiddled_real,
+                            im: output_twiddled_im - half_diff_im,
+                        };
+                    }
+                
+                    // If the output len is odd, the loop above can't postprocess the centermost element, so handle that separately
+                    if output.len() % 2 == 1 {
+                        if let Some(center_element) = output.get_mut(output.len() / 2) {
+                            center_element.im = -center_element.im;
+                        }
+                    }
                 }
                 else {
                     for (val, buf) in input.iter().zip(self.buffer_out.iter_mut()) {
                         *buf = Complex::new(*val, 0.0);
                     }
-
                     // FFT and store result in buffer_out
+                    #[cfg(not(feature = "dummyfft"))]
                     self.fft.process_with_scratch(
                         &mut self.buffer_out,
                         &mut self.scratch,
                     );
-                    for (val, buf) in self.buffer_out.iter().take(self.length/2 + 1).zip(output.iter_mut()) {
-                        *buf = *val;
-                    }
+                    output
+                        .copy_from_slice(&self.buffer_out[0..self.length/2 + 1]);
                 }
                 Ok(())
             }
@@ -315,11 +385,13 @@ macro_rules! impl_c2r {
                     let buffer_in = vec![Complex::zero(); length / 2];
                     let mut sin_cos = Vec::with_capacity(length / 2);
                     let pi = std::f64::consts::PI as $ft;
+                    
                     for k in 0..length / 2 {
                         let sin = (k as $ft * pi / (length / 2) as $ft).sin();
                         let cos = (k as $ft * pi / (length / 2) as $ft).cos();
                         sin_cos.push((sin, cos));
                     }
+
                     let mut fft_planner = FftPlanner::<$ft>::new();
                     let fft = fft_planner.plan_fft_inverse(length / 2);
                     let scratch = vec![Complex::zero(); fft.get_outofplace_scratch_len()];
@@ -377,6 +449,7 @@ macro_rules! impl_c2r {
                         let len = output.len();
                         std::slice::from_raw_parts_mut(ptr, len / 2)
                     };
+                    #[cfg(not(feature = "dummyfft"))]
                     self.fft.process_outofplace_with_scratch(
                         &mut self.buffer_in,
                         &mut buf_out,
@@ -384,12 +457,13 @@ macro_rules! impl_c2r {
                     );
                 }
                 else {
-                    for (val, buf) in input.iter().zip(self.buffer_in.iter_mut()) {
-                        *buf = *val;
-                    }
+                    self.buffer_in[0..input.len()]
+                        .copy_from_slice(&input);
                     for (buf, val) in self.buffer_in.iter_mut().rev().take(self.length/2).zip(input.iter().skip(1)) {
-                        *buf = val.conj();
+                        buf.re = val.re;
+                        buf.im = -val.im;
                     }
+                    #[cfg(not(feature = "dummyfft"))]
                     self.fft.process_with_scratch(
                         &mut self.buffer_in,
                         &mut self.scratch,
@@ -444,8 +518,6 @@ mod tests {
             for (val_long, val) in rustfft_check.iter_mut().rev().take(length/2).zip(indata.iter().skip(1)) {
                 *val_long = val.conj();
             }
-            println!("{:?}", indata);
-            println!("{:?}", rustfft_check);
             let mut fft_planner = FftPlanner::<f64>::new();
             let fft = fft_planner.plan_fft_inverse(length);
 
