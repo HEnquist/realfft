@@ -109,10 +109,10 @@
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
 use rustfft::{FftNum, FftPlanner};
+use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::sync::Arc;
-use std::collections::HashMap;
 
 type Res<T> = Result<T, Box<dyn error::Error>>;
 
@@ -142,10 +142,7 @@ impl FftError {
     }
 }
 
-fn compute_twiddle<T: FftNum>(
-    index: usize,
-    fft_len: usize,
-) -> Complex<T> {
+fn compute_twiddle<T: FftNum>(index: usize, fft_len: usize) -> Complex<T> {
     let constant = -2f64 * std::f64::consts::PI / fft_len as f64;
     let angle = constant * index as f64;
     Complex {
@@ -153,7 +150,6 @@ fn compute_twiddle<T: FftNum>(
         im: T::from_f64(angle.sin()).unwrap(),
     }
 }
-
 
 struct RealToComplexOdd<T> {
     length: usize,
@@ -167,7 +163,6 @@ struct RealToComplexEven<T> {
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
-
 
 struct ComplexToRealOdd<T> {
     length: usize,
@@ -193,7 +188,12 @@ pub trait RealToComplex<T> {
     /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    fn process_with_scratch(&self, input: &mut [T], output: &mut [Complex<T>], scratch: &mut [Complex<T>]) -> Res<()>;
+    fn process_with_scratch(
+        &self,
+        input: &mut [T],
+        output: &mut [Complex<T>],
+        scratch: &mut [Complex<T>],
+    ) -> Res<()>;
 
     /// Get the length of the scratch space needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
@@ -204,13 +204,18 @@ pub trait RealToComplex<T> {
 pub trait ComplexToReal<T> {
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed. 
-    fn process(&self, input: &mut [Complex<T>] , output: &mut [T]) -> Res<()>;
-    
+    /// It also allocates additional scratch space as needed.
+    fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()>;
+
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    fn process_with_scratch(&self, input: &mut [Complex<T>], output: &mut [T], scratch: &mut [Complex<T>]) -> Res<()>;
+    fn process_with_scratch(
+        &self,
+        input: &mut [Complex<T>],
+        output: &mut [T],
+        scratch: &mut [Complex<T>],
+    ) -> Res<()>;
 
     /// Get the length of the scratch space needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
@@ -227,7 +232,7 @@ where
         .map(|(x, (y, z))| (x, y, z))
 }
 
-/// A planner is used to create FFTs. It caches results internally, 
+/// A planner is used to create FFTs. It caches results internally,
 /// so when making more than one FFT it is advisable to reuse the same planner.
 pub struct RealFftPlanner<T: FftNum> {
     planner: FftPlanner<T>,
@@ -250,13 +255,12 @@ impl<T: FftNum> RealFftPlanner<T> {
     pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
         if self.r2c_cache.contains_key(&len) {
             Arc::clone(self.r2c_cache.get(&len).unwrap())
-        }
-        else {
-            let fft = if len %2 > 0 {
+        } else {
+            let fft = if len % 2 > 0 {
                 Arc::new(RealToComplexOdd::new(len, &mut self.planner)) as Arc<dyn RealToComplex<T>>
-            }
-            else {
-                Arc::new(RealToComplexEven::new(len, &mut self.planner)) as Arc<dyn RealToComplex<T>>
+            } else {
+                Arc::new(RealToComplexEven::new(len, &mut self.planner))
+                    as Arc<dyn RealToComplex<T>>
             };
             self.r2c_cache.insert(len, Arc::clone(&fft));
             fft
@@ -267,13 +271,12 @@ impl<T: FftNum> RealFftPlanner<T> {
     pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
         if self.c2r_cache.contains_key(&len) {
             Arc::clone(self.c2r_cache.get(&len).unwrap())
-        }
-        else {
-            let fft = if len %2 > 0 {
+        } else {
+            let fft = if len % 2 > 0 {
                 Arc::new(ComplexToRealOdd::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
-            }
-            else {
-                Arc::new(ComplexToRealEven::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
+            } else {
+                Arc::new(ComplexToRealEven::new(len, &mut self.planner))
+                    as Arc<dyn ComplexToReal<T>>
             };
             self.c2r_cache.insert(len, Arc::clone(&fft));
             fft
@@ -287,15 +290,12 @@ impl<T: FftNum> Default for RealFftPlanner<T> {
     }
 }
 
-
 impl<T: FftNum> RealToComplexOdd<T> {
-    /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT. 
+    /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 == 0 {
-            panic!("Length must be odd, got {}",
-                length,
-            );
+            panic!("Length must be odd, got {}", length,);
         }
         let fft = fft_planner.plan_fft_forward(length);
         let scratch_len = fft.get_inplace_scratch_len() + length;
@@ -319,7 +319,12 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    fn process_with_scratch(&self, input: &mut [T], output: &mut [Complex<T>], scratch: &mut [Complex<T>]) -> Res<()> {
+    fn process_with_scratch(
+        &self,
+        input: &mut [T],
+        output: &mut [Complex<T>],
+        scratch: &mut [Complex<T>],
+    ) -> Res<()> {
         if input.len() != self.length {
             return Err(Box::new(FftError::new(
                 format!(
@@ -357,12 +362,8 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         }
         // FFT and store result in buffer_out
         #[cfg(not(feature = "dummyfft"))]
-        self.fft.process_with_scratch(
-            buffer,
-            fft_scratch,
-        );
-        output
-            .copy_from_slice(&buffer[0..self.length/2 + 1]);
+        self.fft.process_with_scratch(buffer, fft_scratch);
+        output.copy_from_slice(&buffer[0..self.length / 2 + 1]);
         Ok(())
     }
 
@@ -371,14 +372,12 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     }
 }
 
-impl<T: FftNum>  RealToComplexEven<T> {
-    /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT. 
+impl<T: FftNum> RealToComplexEven<T> {
+    /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 > 0 {
-            panic!("Length must be even, got {}",
-                length,
-            );
+            panic!("Length must be even, got {}", length,);
         }
         let twiddle_count = if length % 4 == 0 {
             length / 4
@@ -397,7 +396,6 @@ impl<T: FftNum>  RealToComplexEven<T> {
             fft,
             scratch_len,
         }
-
     }
 }
 
@@ -413,7 +411,12 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
     /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    fn process_with_scratch(&self, input: &mut [T], output: &mut [Complex<T>], scratch: &mut [Complex<T>]) -> Res<()> {
+    fn process_with_scratch(
+        &self,
+        input: &mut [T],
+        output: &mut [Complex<T>],
+        scratch: &mut [Complex<T>],
+    ) -> Res<()> {
         if input.len() != self.length {
             return Err(Box::new(FftError::new(
                 format!(
@@ -444,7 +447,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
                 .as_str(),
             )));
         }
-        
+
         let fftlen = self.length / 2;
         let mut buf_in = unsafe {
             let ptr = input.as_mut_ptr() as *mut Complex<T>;
@@ -454,11 +457,8 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
 
         // FFT and store result in buffer_out
         #[cfg(not(feature = "dummyfft"))]
-        self.fft.process_outofplace_with_scratch(
-            &mut buf_in,
-            &mut output[0..fftlen],
-            scratch,
-        );
+        self.fft
+            .process_outofplace_with_scratch(&mut buf_in, &mut output[0..fftlen], scratch);
         let (mut output_left, mut output_right) = output.split_at_mut(output.len() / 2);
 
         // The first and last element don't require any twiddle factors, so skip that work
@@ -474,7 +474,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
                     re: first_value.re - first_value.im,
                     im: T::zero(),
                 };
-            
+
                 // Chop the first and last element off of our slices so that the loop below doesn't have to deal with them
                 output_left = &mut output_left[1..];
                 let right_len = output_right.len();
@@ -503,22 +503,22 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
             let twiddled_im_diff = diff * twiddle.im;
             let half_sum_re = half * sum.re;
             let half_diff_im = half * diff.im;
-                
+
             let output_twiddled_real = twiddled_re_sum.im + twiddled_im_diff.re;
             let output_twiddled_im = twiddled_im_sum.im - twiddled_re_diff.re;
-                
+
             // We finally have all the data we need to write the transformed data back out where we found it
             *out = Complex {
                 re: half_sum_re + output_twiddled_real,
                 im: half_diff_im + output_twiddled_im,
             };
-                
+
             *out_rev = Complex {
                 re: half_sum_re - output_twiddled_real,
                 im: output_twiddled_im - half_diff_im,
             };
         }
-                
+
         // If the output len is odd, the loop above can't postprocess the centermost element, so handle that separately
         if output.len() % 2 == 1 {
             if let Some(center_element) = output.get_mut(output.len() / 2) {
@@ -526,22 +526,18 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
             }
         }
         Ok(())
-
     }
     fn get_scratch_len(&self) -> usize {
         self.scratch_len
     }
 }
 
-
-impl<T: FftNum>  ComplexToRealOdd<T> {
-    /// Create a new ComplexToReal FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT. 
+impl<T: FftNum> ComplexToRealOdd<T> {
+    /// Create a new ComplexToReal FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 == 0 {
-            panic!("Length must be odd, got {}",
-                length,
-            );
+            panic!("Length must be odd, got {}", length,);
         }
         //let mut fft_planner = FftPlanner::<T>::new();
         let fft = fft_planner.plan_fft_inverse(length);
@@ -557,7 +553,7 @@ impl<T: FftNum>  ComplexToRealOdd<T> {
 impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed. 
+    /// It also allocates additional scratch space as needed.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = vec![Complex::zero(); self.scratch_len];
         self.process_with_scratch(input, output, &mut scratch)
@@ -566,7 +562,12 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    fn process_with_scratch(&self, input: &mut [Complex<T>], output: &mut [T], scratch: &mut [Complex<T>]) -> Res<()> {
+    fn process_with_scratch(
+        &self,
+        input: &mut [Complex<T>],
+        output: &mut [T],
+        scratch: &mut [Complex<T>],
+    ) -> Res<()> {
         if input.len() != (self.length / 2 + 1) {
             return Err(Box::new(FftError::new(
                 format!(
@@ -600,17 +601,18 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
 
         let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
 
-        buffer[0..input.len()]
-            .copy_from_slice(&input);
-        for (buf, val) in buffer.iter_mut().rev().take(self.length/2).zip(input.iter().skip(1)) {
+        buffer[0..input.len()].copy_from_slice(&input);
+        for (buf, val) in buffer
+            .iter_mut()
+            .rev()
+            .take(self.length / 2)
+            .zip(input.iter().skip(1))
+        {
             *buf = val.conj();
             //buf.im = -val.im;
         }
         #[cfg(not(feature = "dummyfft"))]
-        self.fft.process_with_scratch(
-            buffer,
-            fft_scratch,
-        );
+        self.fft.process_with_scratch(buffer, fft_scratch);
         for (val, out) in buffer.iter().zip(output.iter_mut()) {
             *out = val.re;
         }
@@ -622,14 +624,12 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     }
 }
 
-impl<T: FftNum>  ComplexToRealEven<T> {
-    /// Create a new ComplexToReal FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT. 
+impl<T: FftNum> ComplexToRealEven<T> {
+    /// Create a new ComplexToReal FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 > 0 {
-            panic!("Length must be even, got {}",
-                length,
-            );
+            panic!("Length must be even, got {}", length,);
         }
         let twiddle_count = if length % 4 == 0 {
             length / 4
@@ -646,14 +646,14 @@ impl<T: FftNum>  ComplexToRealEven<T> {
             twiddles,
             length,
             fft,
-            scratch_len
+            scratch_len,
         }
     }
 }
 impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed. 
+    /// It also allocates additional scratch space as needed.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = vec![Complex::zero(); self.scratch_len];
         self.process_with_scratch(input, output, &mut scratch)
@@ -662,7 +662,12 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    fn process_with_scratch(&self, input: &mut [Complex<T>], output: &mut [T], scratch: &mut [Complex<T>]) -> Res<()> {
+    fn process_with_scratch(
+        &self,
+        input: &mut [Complex<T>],
+        output: &mut [T],
+        scratch: &mut [Complex<T>],
+    ) -> Res<()> {
         if input.len() != (self.length / 2 + 1) {
             return Err(Box::new(FftError::new(
                 format!(
@@ -701,12 +706,12 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             (Some(first_input), Some(last_input)) => {
                 let first_sum = *first_input + *last_input;
                 let first_diff = *first_input - *last_input;
-            
+
                 *first_input = Complex {
                     re: first_sum.re - first_sum.im,
                     im: first_diff.re - first_diff.im,
                 };
-            
+
                 input_left = &mut input_left[1..];
                 let right_len = input_right.len();
                 input_right = &mut input_right[..right_len - 1];
@@ -722,7 +727,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         ) {
             let sum = *fft_input + *fft_input_rev;
             let diff = *fft_input - *fft_input_rev;
-        
+
             // Apply twiddle factors. Theoretically we'd have to load 2 separate twiddle factors here, one for the beginning
             // and one for the end. But the twiddle factor for the end is jsut the twiddle for the beginning, with the
             // real part negated. Since it's the same twiddle, we can factor out a ton of math ops and cut the number of
@@ -731,10 +736,10 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             let twiddled_im_sum = sum * twiddle.im;
             let twiddled_re_diff = diff * twiddle.re;
             let twiddled_im_diff = diff * twiddle.im;
-        
+
             let output_twiddled_real = twiddled_re_sum.im + twiddled_im_diff.re;
             let output_twiddled_im = twiddled_im_sum.im - twiddled_re_diff.re;
-        
+
             // We finally have all the data we need to write our preprocessed data back where we got it from
             *fft_input = Complex {
                 re: sum.re - output_twiddled_real,
@@ -745,14 +750,14 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
                 im: -output_twiddled_im - diff.im,
             }
         }
-            
+
         // If the output len is odd, the loop above can't preprocess the centermost element, so handle that separately
         if input.len() % 2 == 1 {
             let center_element = input[input.len() / 2];
             let doubled = center_element + center_element;
             input[input.len() / 2] = doubled.conj();
         }
-            
+
         // FFT and store result in buffer_out
         let mut buf_out = unsafe {
             let ptr = output.as_mut_ptr() as *mut Complex<T>;
@@ -772,7 +777,6 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         self.scratch_len
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -797,19 +801,28 @@ mod tests {
     #[test]
     fn complex_to_real() {
         for length in 5..7 {
-            let mut indata: Vec<Complex<f64>> = vec![Complex::zero(); length/2+1];
+            let mut indata: Vec<Complex<f64>> = vec![Complex::zero(); length / 2 + 1];
             let mut rustfft_check: Vec<Complex<f64>> = vec![Complex::zero(); length];
             for (n, val) in indata.iter_mut().enumerate() {
-                *val = Complex::new(n as f64, (2*n) as f64);
+                *val = Complex::new(n as f64, (2 * n) as f64);
             }
             indata[0].im = 0.0;
-            if length%2==0 {
-                indata[length/2].im = 0.0;
+            if length % 2 == 0 {
+                indata[length / 2].im = 0.0;
             }
-            for (val_long, val) in rustfft_check.iter_mut().take(length/2+1).zip(indata.iter()) {
+            for (val_long, val) in rustfft_check
+                .iter_mut()
+                .take(length / 2 + 1)
+                .zip(indata.iter())
+            {
                 *val_long = *val;
             }
-            for (val_long, val) in rustfft_check.iter_mut().rev().take(length/2).zip(indata.iter().skip(1)) {
+            for (val_long, val) in rustfft_check
+                .iter_mut()
+                .rev()
+                .take(length / 2)
+                .zip(indata.iter().skip(1))
+            {
                 *val_long = val.conj();
             }
             let mut fft_planner = FftPlanner::<f64>::new();
@@ -843,15 +856,15 @@ mod tests {
 
             let mut real_planner = RealFftPlanner::<f64>::new();
             let r2c = real_planner.plan_fft_forward(length);
-            let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); length/2+1];
+            let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); length / 2 + 1];
 
             fft.process(&mut rustfft_check);
             r2c.process(&mut indata, &mut out_a).unwrap();
             assert!(compare_complex(
                 &out_a,
-                &rustfft_check[0..(length/2+1)],
+                &rustfft_check[0..(length / 2 + 1)],
                 1.0e-9
             ));
         }
-    }   
+    }
 }

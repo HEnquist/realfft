@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion
 extern crate realfft;
 extern crate rustfft;
 
-use realfft::{RealFftPlanner};
+use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
 
 /// Times just the FFT execution (not allocation and pre-calculation)
@@ -113,11 +113,19 @@ fn bench_range_inv(c: &mut Criterion) {
     let mut group = c.benchmark_group("Inv Range 1022-1025");
     for i in 1022..1026 {
         group.bench_with_input(BenchmarkId::new("Complex", i), &i, |b, i| bench_ifft(b, *i));
-        group.bench_with_input(BenchmarkId::new("Real", i), &i, |b, i| bench_realifft(b, *i));
+        group.bench_with_input(BenchmarkId::new("Real", i), &i, |b, i| {
+            bench_realifft(b, *i)
+        });
     }
     group.finish();
 }
 
-criterion_group!(benches, bench_pow2_fw, bench_range_fw, bench_pow2_inv, bench_range_inv);
+criterion_group!(
+    benches,
+    bench_pow2_fw,
+    bench_range_fw,
+    bench_pow2_inv,
+    bench_range_inv
+);
 
 criterion_main!(benches);
