@@ -96,11 +96,11 @@ let mut outdata: Vec<f64> = vec![0.0; 256];
 let mut real_planner = RealFftPlanner::<f64>::new();
 
 //create an FFT and forward transform the input data
-let r2c = real_planner.plan_real_to_complex(256);
+let r2c = real_planner.plan_fft_forward(256);
 r2c.process(&mut indata, &mut spectrum).unwrap();
 
 // create an iFFT and inverse transform the spectum
-let c2r = real_planner.plan_complex_to_real(256);
+let c2r = real_planner.plan_fft_inverse(256);
 c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
 

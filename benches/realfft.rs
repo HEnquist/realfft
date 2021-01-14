@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion
 extern crate realfft;
 extern crate rustfft;
 
-use realfft::{RealToComplex, ComplexToReal};
+use realfft::{RealFftPlanner};
 use rustfft::num_complex::Complex;
 
 /// Times just the FFT execution (not allocation and pre-calculation)
@@ -24,7 +24,8 @@ fn bench_fft(b: &mut Bencher, len: usize) {
 }
 
 fn bench_realfft(b: &mut Bencher, len: usize) {
-    let mut fft = RealToComplex::<f64>::new(len).unwrap();
+    let mut planner = RealFftPlanner::<f64>::new();
+    let fft = planner.plan_fft_forward(len);
 
     let mut signal = vec![0_f64; len];
     let mut spectrum = vec![
@@ -34,7 +35,8 @@ fn bench_realfft(b: &mut Bencher, len: usize) {
         };
         len / 2 + 1
     ];
-    b.iter(|| fft.process(&mut signal, &mut spectrum));
+    let mut scratch = vec![Complex::from(0.0); fft.get_scratch_len()];
+    b.iter(|| fft.process_with_scratch(&mut signal, &mut spectrum, &mut scratch));
 }
 
 /// Times just the FFT execution (not allocation and pre-calculation)
@@ -56,7 +58,8 @@ fn bench_ifft(b: &mut Bencher, len: usize) {
 }
 
 fn bench_realifft(b: &mut Bencher, len: usize) {
-    let mut fft = ComplexToReal::<f64>::new(len).unwrap();
+    let mut planner = RealFftPlanner::<f64>::new();
+    let fft = planner.plan_fft_inverse(len);
 
     let mut signal = vec![0_f64; len];
     let mut spectrum = vec![
@@ -66,7 +69,8 @@ fn bench_realifft(b: &mut Bencher, len: usize) {
         };
         len / 2 + 1
     ];
-    b.iter(|| fft.process(&mut spectrum, &mut signal));
+    let mut scratch = vec![Complex::from(0.0); fft.get_scratch_len()];
+    b.iter(|| fft.process_with_scratch(&mut spectrum, &mut signal, &mut scratch));
 }
 
 fn bench_pow2_fw(c: &mut Criterion) {

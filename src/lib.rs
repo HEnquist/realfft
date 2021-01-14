@@ -94,11 +94,11 @@
 //! let mut real_planner = RealFftPlanner::<f64>::new();
 //!
 //! //create an FFT and forward transform the input data
-//! let r2c = real_planner.plan_real_to_complex(256);
+//! let r2c = real_planner.plan_fft_forward(256);
 //! r2c.process(&mut indata, &mut spectrum).unwrap();
 //!
 //! // create an iFFT and inverse transform the spectum
-//! let c2r = real_planner.plan_complex_to_real(256);
+//! let c2r = real_planner.plan_fft_inverse(256);
 //! c2r.process(&mut spectrum, &mut outdata).unwrap();
 //! ```
 //!
@@ -247,7 +247,7 @@ impl<T: FftNum> RealFftPlanner<T> {
     }
 
     /// Plan a Real-to-Complex forward FFT.
-    pub fn plan_real_to_complex(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
+    pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
         if self.r2c_cache.contains_key(&len) {
             Arc::clone(self.r2c_cache.get(&len).unwrap())
         }
@@ -264,7 +264,7 @@ impl<T: FftNum> RealFftPlanner<T> {
     }
 
     /// Plan a Complex-to-Real inverse FFT.
-    pub fn plan_complex_to_real(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
+    pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
         if self.c2r_cache.contains_key(&len) {
             Arc::clone(self.c2r_cache.get(&len).unwrap())
         }
@@ -816,7 +816,7 @@ mod tests {
             let fft = fft_planner.plan_fft_inverse(length);
 
             let mut real_planner = RealFftPlanner::<f64>::new();
-            let c2r = real_planner.plan_complex_to_real(length);
+            let c2r = real_planner.plan_fft_inverse(length);
             let mut out_a: Vec<f64> = vec![0.0; length];
             c2r.process(&mut indata, &mut out_a).unwrap();
             fft.process(&mut rustfft_check);
@@ -842,7 +842,7 @@ mod tests {
             let fft = fft_planner.plan_fft_forward(length);
 
             let mut real_planner = RealFftPlanner::<f64>::new();
-            let r2c = real_planner.plan_real_to_complex(length);
+            let r2c = real_planner.plan_fft_forward(length);
             let mut out_a: Vec<Complex<f64>> = vec![Complex::zero(); length/2+1];
 
             fft.process(&mut rustfft_check);
