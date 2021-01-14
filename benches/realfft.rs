@@ -114,6 +114,6 @@ fn bench_range_inv(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_range_inv); //bench_pow2_fw, bench_range_fw, bench_pow2_inv, 
+criterion_group!(benches, bench_pow2_fw, bench_range_fw, bench_pow2_inv, bench_range_inv);
 
 criterion_main!(benches);
