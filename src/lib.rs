@@ -361,7 +361,6 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
             *buf = Complex::new(*val, T::zero());
         }
         // FFT and store result in buffer_out
-        #[cfg(not(feature = "dummyfft"))]
         self.fft.process_with_scratch(buffer, fft_scratch);
         output.copy_from_slice(&buffer[0..self.length / 2 + 1]);
         Ok(())
@@ -456,7 +455,6 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
         };
 
         // FFT and store result in buffer_out
-        #[cfg(not(feature = "dummyfft"))]
         self.fft
             .process_outofplace_with_scratch(&mut buf_in, &mut output[0..fftlen], scratch);
         let (mut output_left, mut output_right) = output.split_at_mut(output.len() / 2);
@@ -611,7 +609,6 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
             *buf = val.conj();
             //buf.im = -val.im;
         }
-        #[cfg(not(feature = "dummyfft"))]
         self.fft.process_with_scratch(buffer, fft_scratch);
         for (val, out) in buffer.iter().zip(output.iter_mut()) {
             *out = val.re;
@@ -764,7 +761,6 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             let len = output.len();
             std::slice::from_raw_parts_mut(ptr, len / 2)
         };
-        #[cfg(not(feature = "dummyfft"))]
         self.fft.process_outofplace_with_scratch(
             &mut input[..output.len() / 2],
             &mut buf_out,
@@ -781,30 +777,44 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
 #[cfg(test)]
 mod tests {
     use crate::RealFftPlanner;
+    use rand::Rng;
     use rustfft::num_complex::Complex;
     use rustfft::num_traits::Zero;
     use rustfft::FftPlanner;
 
-    fn compare_complex(a: &[Complex<f64>], b: &[Complex<f64>], tol: f64) -> bool {
-        a.iter().zip(b.iter()).fold(true, |eq, (val_a, val_b)| {
-            eq && (val_a.re - val_b.re).abs() < tol && (val_a.im - val_b.im).abs() < tol
+    // get the largest difference
+    fn compare_complex(a: &[Complex<f64>], b: &[Complex<f64>]) -> f64 {
+        a.iter().zip(b.iter()).fold(0.0, |maxdiff, (val_a, val_b)| {
+            let diff = (val_a - val_b).norm();
+            if maxdiff > diff {
+                maxdiff
+            } else {
+                diff
+            }
         })
     }
 
-    fn compare_f64(a: &[f64], b: &[f64], tol: f64) -> bool {
-        a.iter()
-            .zip(b.iter())
-            .fold(true, |eq, (val_a, val_b)| eq && (val_a - val_b).abs() < tol)
+    // get the largest difference
+    fn compare_f64(a: &[f64], b: &[f64]) -> f64 {
+        a.iter().zip(b.iter()).fold(0.0, |maxdiff, (val_a, val_b)| {
+            let diff = (val_a - val_b).abs();
+            if maxdiff > diff {
+                maxdiff
+            } else {
+                diff
+            }
+        })
     }
 
     // Compare ComplexToReal with standard iFFT
     #[test]
     fn complex_to_real() {
-        for length in 5..7 {
+        for length in 1..1000 {
             let mut indata: Vec<Complex<f64>> = vec![Complex::zero(); length / 2 + 1];
             let mut rustfft_check: Vec<Complex<f64>> = vec![Complex::zero(); length];
-            for (n, val) in indata.iter_mut().enumerate() {
-                *val = Complex::new(n as f64, (2 * n) as f64);
+            let mut rng = rand::thread_rng();
+            for val in indata.iter_mut() {
+                *val = Complex::new(rng.gen::<f64>(), rng.gen::<f64>());
             }
             indata[0].im = 0.0;
             if length % 2 == 0 {
@@ -835,17 +845,24 @@ mod tests {
             fft.process(&mut rustfft_check);
 
             let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
-            assert!(compare_f64(&out_a, &check_real, 1.0e-9));
+            let maxdiff = compare_f64(&out_a, &check_real);
+            assert!(
+                maxdiff < 1.0e-9,
+                "Length: {}, too large error: {}",
+                length,
+                maxdiff
+            );
         }
     }
 
     // Compare RealToComplex with standard FFT
     #[test]
     fn real_to_complex() {
-        for length in 2..64 {
+        for length in 1..1000 {
             let mut indata = vec![0.0f64; length];
-            for (n, val) in indata.iter_mut().enumerate() {
-                *val = n as f64;
+            let mut rng = rand::thread_rng();
+            for val in indata.iter_mut() {
+                *val = rng.gen::<f64>();
             }
             let mut rustfft_check = indata
                 .iter()
@@ -860,11 +877,13 @@ mod tests {
 
             fft.process(&mut rustfft_check);
             r2c.process(&mut indata, &mut out_a).unwrap();
-            assert!(compare_complex(
-                &out_a,
-                &rustfft_check[0..(length / 2 + 1)],
-                1.0e-9
-            ));
+            let maxdiff = compare_complex(&out_a, &rustfft_check[0..(length / 2 + 1)]);
+            assert!(
+                maxdiff < 1.0e-9,
+                "Length: {}, too large error: {}",
+                length,
+                maxdiff
+            );
         }
     }
 }

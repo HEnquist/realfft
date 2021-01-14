@@ -12,14 +12,12 @@ readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-dummyfft = []
-
 [dependencies]
 rustfft = "5.0.0"
 
 [dev-dependencies]
 criterion = "0.3"
+rand = "0.8.1"
 
 [[bench]]
 name = "realfft"

@@ -75,7 +75,7 @@ fn bench_realifft(b: &mut Bencher, len: usize) {
 
 fn bench_pow2_fw(c: &mut Criterion) {
     let mut group = c.benchmark_group("Fw Powers of 2");
-    for i in [32, 64, 128, 256, 512, 4096, 65536].iter() {
+    for i in [8, 16, 32, 64, 128, 256, 1024, 4096, 65536].iter() {
         group.bench_with_input(BenchmarkId::new("Complex", i), i, |b, i| bench_fft(b, *i));
         group.bench_with_input(BenchmarkId::new("Real", i), i, |b, i| bench_realfft(b, *i));
     }
@@ -84,7 +84,7 @@ fn bench_pow2_fw(c: &mut Criterion) {
 
 fn bench_pow2_inv(c: &mut Criterion) {
     let mut group = c.benchmark_group("Inv Powers of 2");
-    for i in [32, 64, 128, 256, 512, 4096, 65536].iter() {
+    for i in [8, 16, 32, 64, 128, 256, 1024, 4096, 65536].iter() {
         group.bench_with_input(BenchmarkId::new("Complex", i), i, |b, i| bench_ifft(b, *i));
         group.bench_with_input(BenchmarkId::new("Real", i), i, |b, i| bench_realifft(b, *i));
     }
