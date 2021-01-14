@@ -259,7 +259,7 @@ pub trait ComplexToReal<T> {
     fn make_scratch_vec(&self) -> Vec<Complex<T>>;
 }
 
-pub fn zip3<A, B, C>(a: A, b: B, c: C) -> impl Iterator<Item = (A::Item, B::Item, C::Item)>
+fn zip3<A, B, C>(a: A, b: B, c: C) -> impl Iterator<Item = (A::Item, B::Item, C::Item)>
 where
     A: IntoIterator,
     B: IntoIterator,
