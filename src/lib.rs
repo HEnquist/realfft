@@ -117,10 +117,11 @@
 
 pub use rustfft::num_complex;
 pub use rustfft::num_traits;
+pub use rustfft::FftNum;
 
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
-use rustfft::{FftNum, FftPlanner};
+use rustfft::FftPlanner;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
