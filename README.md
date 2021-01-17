@@ -53,7 +53,7 @@ FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2
 
 The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of indendent values as we started with.
 
-#### real-to-complex
+#### Real-to-complex
 Using a real-to-complex FFT removes the need for converting the input data to complex.
 It also avoids caclulating the redundant output values.
 

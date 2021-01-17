@@ -51,7 +51,7 @@
 //!
 //! The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of indendent values as we started with.
 //!
-//! ### real-to-complex
+//! ### Real-to-complex
 //! Using a real-to-complex FFT removes the need for converting the input data to complex.
 //! It also avoids caclulating the redundant output values.
 //!
@@ -172,26 +172,26 @@ fn compute_twiddle<T: FftNum>(index: usize, fft_len: usize) -> Complex<T> {
     }
 }
 
-struct RealToComplexOdd<T> {
+pub struct RealToComplexOdd<T> {
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
 
-struct RealToComplexEven<T> {
+pub struct RealToComplexEven<T> {
     twiddles: Vec<Complex<T>>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
 
-struct ComplexToRealOdd<T> {
+pub struct ComplexToRealOdd<T> {
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
 
-struct ComplexToRealEven<T> {
+pub struct ComplexToRealEven<T> {
     twiddles: Vec<Complex<T>>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
@@ -202,14 +202,16 @@ struct ComplexToRealEven<T> {
 /// spectrum of length N+1.
 #[allow(clippy::len_without_is_empty)]
 pub trait RealToComplex<T> {
-    /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.  
+    /// It also allocates additional scratch space as needed.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()>;
 
-    /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [T],
@@ -237,14 +239,16 @@ pub trait RealToComplex<T> {
 /// spectrum of length 2*N.
 #[allow(clippy::len_without_is_empty)]
 pub trait ComplexToReal<T> {
-    /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
+    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()>;
 
-    /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
+    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -298,7 +302,8 @@ impl<T: FftNum> RealFftPlanner<T> {
         }
     }
 
-    /// Plan a Real-to-Complex forward FFT.
+    /// Plan a Real-to-Complex forward FFT. Returns the FFT in a shared reference.
+    /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
     pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
         if let Some(fft) = self.r2c_cache.get(&len) {
             Arc::clone(&fft)
@@ -314,7 +319,8 @@ impl<T: FftNum> RealFftPlanner<T> {
         }
     }
 
-    /// Plan a Complex-to-Real inverse FFT.
+    /// Plan a Complex-to-Real inverse FFT. Returns the FFT in a shared reference.
+    /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
     pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
         if let Some(fft) = self.c2r_cache.get(&len) {
             Arc::clone(&fft)
@@ -355,17 +361,19 @@ impl<T: FftNum> RealToComplexOdd<T> {
 }
 
 impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
-    /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.  
+    /// It also allocates additional scratch space as needed.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [T],
@@ -462,17 +470,19 @@ impl<T: FftNum> RealToComplexEven<T> {
 }
 
 impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
-    /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.  
+    /// It also allocates additional scratch space as needed.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a vector of 2*N real-valued samples, storing the result in the N+1 element long complex output vector.
+    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [T],
@@ -628,17 +638,19 @@ impl<T: FftNum> ComplexToRealOdd<T> {
 }
 
 impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
-    /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
+    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
+    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -743,17 +755,19 @@ impl<T: FftNum> ComplexToRealEven<T> {
     }
 }
 impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
-    /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
+    /// Transform a complex spectrum of N/2+1 values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a complex spectrum of N+1 values and store the real result in the 2*N long output.
+    /// Transform a complex spectrum of N/2+1 values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
