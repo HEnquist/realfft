@@ -2,7 +2,10 @@
 
 ## RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 
-This library is a wrapper for RustFFT that avoids the need of converting the data to complex before performing a FFT.
+This library is a wrapper for RustFFT that enables performing FFT of real-valued data.
+The API is designed to be as similar as possible to RustFFT.
+
+Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
 If the length is even, it also enables faster computations by using a complex FFT of half the length.
 It then packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
 It then post-processes the result to give only the first half of the complex spectrum, as an N+1 long complex vector.
@@ -14,52 +17,57 @@ and using a 2N long FFT depends on the length f the input data.
 The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
 The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.
 
-### Why use real-to-complex fft?
-#### Using a complex-to-complex fft
-A simple way to get the fft of a rea values vector is to convert it to complex, and using a complex-to-complex fft.
+### Why use real-to-complex FFT?
+#### Using a complex-to-complex FFT
+A simple way to get the FFT of a rea values vector is to convert it to complex, and using a complex-to-complex FFT.
 
 Let's assume `x` is a 6 element long real vector:
 ```
 x = [x0r, x1r, x2r, x3r, x4r, x5r]
 ```
 
-Converted to complex, using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
+We now convert `x` to complex by adding an imaginary part with value zero. Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
 ```
 x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0, (x5r, 0)]
 ```
 
-
-The general result of `X = FFT(x)` is:
+Performing a normal complex FFT, the result of `FFT(x_c)` is:
 ```
-X = [(X0r, X0i), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X4r, X4i), (X5r, X5i)]
-```
-
-However, because our `x` was real-valued, some of this is redundant:
-```
-FFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, 0), (X2r, -X2i), (X1r, -X1i)]
+FFT(x_c) = [(X0r, X0i), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X4r, X4i), (X5r, X5i)]
 ```
 
-As we can see, the output contains a fair bit of redundant data. But it still takes time for the FFT to calculate these values. Converting the input data to complex also takes a little bit of time.
+But because our `x_c` is real-valued (all imaginary parts are zero), some of this becomes redundant:
+```
+FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, 0), (X2r, -X2i), (X1r, -X1i)]
+```
+
+The last two values are the complex conjugates of `X1` and `X2`. Additionally, `X0i` and `X3i` are zero.
+As we can see, the output contains 6 independent values, and the rest is redundant.
+But it still takes time for the FFT to calculate the redundant values.
+Converting the input data to complex also takes a little bit of time.
+
+If the length of `x` instead had been 7, result would have been:
+```
+FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
+```
+
+The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of indendent values as we started with.
 
 #### real-to-complex
-Using a real-to-complex fft removes the need for converting the input data to complex.
+Using a real-to-complex FFT removes the need for converting the input data to complex.
 It also avoids caclulating the redundant output values.
 
-The result is:
+The result for 6 elements is:
 ```
 RealFFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, 0)]
 ```
 
-If the length instead had been 7, result would have been:
-```
-FFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
-```
-After removing the reduntant elements, the result is:
+The result for 7 elements is:
 ```
 RealFFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i)]
 ```
 
-This is the data layout output by the real-to-complex fft, and the one expected as input to the complex-to-real ifft.
+This is the data layout output by the real-to-complex FFT, and the one expected as input to the complex-to-real iFFT.
 
 ### Scaling
 RealFFT matches the behaviour of RustFFT and does not normalize the output of either FFT of iFFT. To get normalized results, each element must be scaled by `1/sqrt(length)`. If the processing involves both an FFT and an iFFT step, it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
@@ -92,7 +100,7 @@ let length = 256;
 // make a planner
 let mut real_planner = RealFftPlanner::<f64>::new();
 
-// create an FFT
+// create a FFT
 let r2c = real_planner.plan_fft_forward(length);
 // make input and output vectors
 let mut indata = r2c.make_input_vec();
