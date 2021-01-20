@@ -201,7 +201,7 @@ pub struct ComplexToRealEven<T> {
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
 #[allow(clippy::len_without_is_empty)]
-pub trait RealToComplex<T> {
+pub trait RealToComplex<T>: Sync + Send {
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
@@ -238,7 +238,7 @@ pub trait RealToComplex<T> {
 /// An FFT that takes a complex-valued input vector of length N+1 and transforms it to a complex
 /// spectrum of length 2*N.
 #[allow(clippy::len_without_is_empty)]
-pub trait ComplexToReal<T> {
+pub trait ComplexToReal<T>: Sync + Send {
     /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
