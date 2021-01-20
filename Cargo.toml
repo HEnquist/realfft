@@ -13,7 +13,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rustfft = "5.0.0"
+rustfft = "5.0.1"
 
 [dev-dependencies]
 criterion = "0.3"
