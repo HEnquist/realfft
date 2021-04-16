@@ -1,6 +1,4 @@
-# realfft
-
-## RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
+# RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 
 This library is a wrapper for RustFFT that enables performing FFT of real-valued data.
 The API is designed to be as similar as possible to RustFFT.
