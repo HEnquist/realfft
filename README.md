@@ -8,7 +8,7 @@ The API is designed to be as similar as possible to RustFFT.
 Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
 If the length is even, it also enables faster computations by using a complex FFT of half the length.
 It then packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
-It then post-processes the result to give only the first half of the complex spectrum, as an N+1 long complex vector.
+The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex vector.
 
 The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
 
@@ -120,6 +120,12 @@ assert_eq!(outdata.len(), length);
 
 c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
+
+### Versions
+- 2.0.0: Update RustFFT to 6.0.0 and num-complex to 0.4.0.
+- 1.1.0: Add missing Sync+Send.
+- 1.0.0: First version with new api.
+
 
 ### Compatibility
 
