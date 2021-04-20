@@ -400,7 +400,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
                 format!(
                     "Wrong length of output, expected {}, got {}",
                     self.length / 2 + 1,
-                    input.len()
+                    output.len()
                 )
                 .as_str(),
             )));
@@ -509,7 +509,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
                 format!(
                     "Wrong length of output, expected {}, got {}",
                     self.length / 2 + 1,
-                    input.len()
+                    output.len()
                 )
                 .as_str(),
             )));
@@ -677,7 +677,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
                 format!(
                     "Wrong length of output, expected {}, got {}",
                     self.length,
-                    input.len()
+                    output.len()
                 )
                 .as_str(),
             )));
@@ -794,7 +794,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
                 format!(
                     "Wrong length of output, expected {}, got {}",
                     self.length,
-                    input.len()
+                    output.len()
                 )
                 .as_str(),
             )));
