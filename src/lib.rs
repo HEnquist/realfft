@@ -140,33 +140,43 @@ use std::error;
 use std::fmt;
 use std::sync::Arc;
 
-type Res<T> = Result<T, Box<dyn error::Error>>;
+type Res<T> = Result<T, FftError>;
 
 /// Custom error returned by FFTs
 #[derive(Debug)]
-pub struct FftError {
-    desc: String,
+pub enum FftError {
+    /// The input buffer has the wrong size.
+    InputBuffer(usize, usize),
+    /// The output buffer has the wrong size.
+    OutputBuffer(usize, usize),
+    /// The scratch buffer has the wrong size.
+    ScratchBuffer(usize, usize),
+    /// The input data is invalid, see description
+    InputValues(String),
 }
 
 impl fmt::Display for FftError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.desc)
+        let desc = match self {
+            Self::InputBuffer(got, expected) => {
+                format!("Wrong length of input, expected {}, got {}", got, expected)
+            }
+            Self::OutputBuffer(got, expected) => {
+                format!("Wrong length of output, expected {}, got {}", got, expected)
+            }
+            Self::ScratchBuffer(got, expected) => {
+                format!(
+                    "Wrong length of scratch, expected {}, got {}",
+                    got, expected
+                )
+            }
+            Self::InputValues(desc) => desc.to_string(),
+        };
+        write!(f, "{}", desc)
     }
 }
 
-impl error::Error for FftError {
-    fn description(&self) -> &str {
-        &self.desc
-    }
-}
-
-impl FftError {
-    pub fn new(desc: &str) -> Self {
-        FftError {
-            desc: desc.to_owned(),
-        }
-    }
-}
+impl error::Error for FftError {}
 
 fn compute_twiddle<T: FftNum>(index: usize, fft_len: usize) -> Complex<T> {
     let constant = -2f64 * std::f64::consts::PI / fft_len as f64;
@@ -248,12 +258,18 @@ pub trait ComplexToReal<T>: Sync + Send {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
+    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
+    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()>;
 
     /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
+    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
+    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -311,7 +327,7 @@ impl<T: FftNum> RealFftPlanner<T> {
     /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
     pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
         if let Some(fft) = self.r2c_cache.get(&len) {
-            Arc::clone(&fft)
+            Arc::clone(fft)
         } else {
             let fft = if len % 2 > 0 {
                 Arc::new(RealToComplexOdd::new(len, &mut self.planner)) as Arc<dyn RealToComplex<T>>
@@ -328,7 +344,7 @@ impl<T: FftNum> RealFftPlanner<T> {
     /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
     pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
         if let Some(fft) = self.c2r_cache.get(&len) {
-            Arc::clone(&fft)
+            Arc::clone(fft)
         } else {
             let fft = if len % 2 > 0 {
                 Arc::new(ComplexToRealOdd::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
@@ -386,34 +402,13 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
         if input.len() != self.length {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of input, expected {}, got {}",
-                    self.length,
-                    input.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::InputBuffer(self.length, input.len()));
         }
         if output.len() != (self.length / 2 + 1) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of output, expected {}, got {}",
-                    self.length / 2 + 1,
-                    output.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::OutputBuffer(self.length, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of scratch, expected {}, got {}",
-                    self.scratch_len / 2 + 1,
-                    scratch.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
         }
         let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
 
@@ -495,38 +490,17 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
         if input.len() != self.length {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of input, expected {}, got {}",
-                    self.length,
-                    input.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::InputBuffer(self.length, input.len()));
         }
         if output.len() != (self.length / 2 + 1) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of output, expected {}, got {}",
-                    self.length / 2 + 1,
-                    output.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::OutputBuffer(self.length, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of scratch, expected {}, got {}",
-                    self.scratch_len / 2 + 1,
-                    scratch.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
         }
 
         let fftlen = self.length / 2;
-        let mut buf_in = unsafe {
+        let buf_in = unsafe {
             let ptr = input.as_mut_ptr() as *mut Complex<T>;
             let len = input.len();
             std::slice::from_raw_parts_mut(ptr, len / 2)
@@ -534,7 +508,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
 
         // FFT and store result in buffer_out
         self.fft
-            .process_outofplace_with_scratch(&mut buf_in, &mut output[0..fftlen], scratch);
+            .process_outofplace_with_scratch(buf_in, &mut output[0..fftlen], scratch);
         let (mut output_left, mut output_right) = output.split_at_mut(output.len() / 2);
 
         // The first and last element don't require any twiddle factors, so skip that work
@@ -647,6 +621,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
+    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
+    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
@@ -656,6 +633,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
+    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
+    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -663,39 +643,20 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
         if input.len() != (self.length / 2 + 1) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of input, expected {}, got {}",
-                    self.length / 2 + 1,
-                    input.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::InputBuffer(self.length, input.len()));
         }
         if output.len() != self.length {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of output, expected {}, got {}",
-                    self.length,
-                    output.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::OutputBuffer(self.length, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of scratch, expected {}, got {}",
-                    self.scratch_len / 2 + 1,
-                    scratch.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
         }
+
+        let first_invalid = input[0].im != T::from_f64(0.0).unwrap();
 
         let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
 
-        buffer[0..input.len()].copy_from_slice(&input);
+        buffer[0..input.len()].copy_from_slice(input);
         for (buf, val) in buffer
             .iter_mut()
             .rev()
@@ -708,6 +669,11 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
         self.fft.process_with_scratch(buffer, fft_scratch);
         for (val, out) in buffer.iter().zip(output.iter_mut()) {
             *out = val.re;
+        }
+        if first_invalid {
+            return Err(FftError::InputValues(
+                "Imaginary part of first input value is non-zero".to_string(),
+            ));
         }
         Ok(())
     }
@@ -764,6 +730,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
+    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
+    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
@@ -773,6 +742,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
+    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
+    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -780,35 +752,20 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
         if input.len() != (self.length / 2 + 1) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of input, expected {}, got {}",
-                    self.length / 2 + 1,
-                    input.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::InputBuffer(self.length, input.len()));
         }
         if output.len() != self.length {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of output, expected {}, got {}",
-                    self.length,
-                    output.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::OutputBuffer(self.length, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(Box::new(FftError::new(
-                format!(
-                    "Wrong length of scratch, expected {}, got {}",
-                    self.scratch_len / 2 + 1,
-                    scratch.len()
-                )
-                .as_str(),
-            )));
+            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
         }
+        if input.is_empty() {
+            return Ok(());
+        }
+        let first_invalid = input[0].im != T::from_f64(0.0).unwrap();
+        let last_invalid = input[input.len() - 1].im != T::from_f64(0.0).unwrap();
+
         let (mut input_left, mut input_right) = input.split_at_mut(input.len() / 2);
 
         // We have to preprocess the input in-place before we send it to the FFT.
@@ -870,16 +827,26 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         }
 
         // FFT and store result in buffer_out
-        let mut buf_out = unsafe {
+        let buf_out = unsafe {
             let ptr = output.as_mut_ptr() as *mut Complex<T>;
             let len = output.len();
             std::slice::from_raw_parts_mut(ptr, len / 2)
         };
-        self.fft.process_outofplace_with_scratch(
-            &mut input[..output.len() / 2],
-            &mut buf_out,
-            scratch,
-        );
+        self.fft
+            .process_outofplace_with_scratch(&mut input[..output.len() / 2], buf_out, scratch);
+        if first_invalid && last_invalid {
+            return Err(FftError::InputValues(
+                "Imaginary parts of both first and last input values are non-zero".to_string(),
+            ));
+        } else if first_invalid {
+            return Err(FftError::InputValues(
+                "Imaginary part of first input value is non-zero".to_string(),
+            ));
+        } else if last_invalid {
+            return Err(FftError::InputValues(
+                "Imaginary part of last input value is non-zero".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -906,11 +873,13 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::FftError;
     use crate::RealFftPlanner;
     use rand::Rng;
     use rustfft::num_complex::Complex;
     use rustfft::num_traits::Zero;
     use rustfft::FftPlanner;
+    use std::error::Error;
 
     // get the largest difference
     fn compare_complex(a: &[Complex<f64>], b: &[Complex<f64>]) -> f64 {
@@ -985,6 +954,71 @@ mod tests {
         }
     }
 
+    // Test that ComplexToReal returns the right errors
+    #[test]
+    fn complex_to_real_errors_even() {
+        let length = 100;
+        let mut real_planner = RealFftPlanner::<f64>::new();
+        let c2r = real_planner.plan_fft_inverse(length);
+        let mut out_a = c2r.make_output_vec();
+        let mut indata = c2r.make_input_vec();
+        let mut rng = rand::thread_rng();
+
+        // Make some valid data
+        for val in indata.iter_mut() {
+            *val = Complex::new(rng.gen::<f64>(), rng.gen::<f64>());
+        }
+        indata[0].im = 0.0;
+        indata[50].im = 0.0;
+        // this should be ok
+        assert!(c2r.process(&mut indata, &mut out_a).is_ok());
+
+        // Make some invalid data, first point invalid
+        for val in indata.iter_mut() {
+            *val = Complex::new(rng.gen::<f64>(), rng.gen::<f64>());
+        }
+        indata[50].im = 0.0;
+        let res = c2r.process(&mut indata, &mut out_a);
+        assert!(res.is_err());
+        assert!(matches!(res, Err(FftError::InputValues(_))));
+
+        // Make some invalid data, last point invalid
+        for val in indata.iter_mut() {
+            *val = Complex::new(rng.gen::<f64>(), rng.gen::<f64>());
+        }
+        indata[0].im = 0.0;
+        let res = c2r.process(&mut indata, &mut out_a);
+        assert!(res.is_err());
+        assert!(matches!(res, Err(FftError::InputValues(_))));
+    }
+
+    // Test that ComplexToReal returns the right errors
+    #[test]
+    fn complex_to_real_errors_odd() {
+        let length = 101;
+        let mut real_planner = RealFftPlanner::<f64>::new();
+        let c2r = real_planner.plan_fft_inverse(length);
+        let mut out_a = c2r.make_output_vec();
+        let mut indata = c2r.make_input_vec();
+        let mut rng = rand::thread_rng();
+
+        // Make some valid data
+        for val in indata.iter_mut() {
+            *val = Complex::new(rng.gen::<f64>(), rng.gen::<f64>());
+        }
+        indata[0].im = 0.0;
+        // this should be ok
+        assert!(c2r.process(&mut indata, &mut out_a).is_ok());
+
+        // Make some invalid data, first point invalid
+        for val in indata.iter_mut() {
+            *val = Complex::new(rng.gen::<f64>(), rng.gen::<f64>());
+        }
+        let res = c2r.process(&mut indata, &mut out_a);
+        assert!(res.is_err());
+        assert!(matches!(res, Err(FftError::InputValues(_))));
+    }
+
     // Compare RealToComplex with standard FFT
     #[test]
     fn real_to_complex() {
@@ -1014,5 +1048,16 @@ mod tests {
                 maxdiff
             );
         }
+    }
+
+    // Check that the ? operator works on the custom errors. No need to run, just needs to compile.
+    #[allow(dead_code)]
+    fn test_error() -> Result<(), Box<dyn Error>> {
+        let mut real_planner = RealFftPlanner::<f64>::new();
+        let r2c = real_planner.plan_fft_forward(100);
+        let mut out_a = r2c.make_output_vec();
+        let mut indata = r2c.make_input_vec();
+        r2c.process(&mut indata, &mut out_a)?;
+        Ok(())
     }
 }

@@ -44,7 +44,7 @@ As we can see, the output contains 6 independent values, and the rest is redunda
 But it still takes time for the FFT to calculate the redundant values.
 Converting the input data to complex also takes a little bit of time.
 
-If the length of `x` instead had been 7, result would have been:
+If the length of `x` instead had been 7, the result would have been:
 ```
 FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
 ```
@@ -53,7 +53,7 @@ The result is similar, but this time there is no zero at `X3i`. Also in this cas
 
 #### Real-to-complex
 Using a real-to-complex FFT removes the need for converting the input data to complex.
-It also avoids caclulating the redundant output values.
+It also avoids calculating the redundant output values.
 
 The result for 6 elements is:
 ```
@@ -120,6 +120,7 @@ c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
 
 ### Versions
+- 3.0.0: Improved error reporting.
 - 2.0.0: Update RustFFT to 6.0.0 and num-complex to 0.4.0.
 - 1.1.0: Add missing Sync+Send.
 - 1.0.0: First version with new api.
