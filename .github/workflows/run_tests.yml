@@ -3,7 +3,7 @@ on: [pull_request]
 name: CI
 
 jobs:
-  check:
+  check_and_test:
     name: Check+Test
     runs-on: ubuntu-latest
     strategy:
@@ -12,7 +12,6 @@ jobs:
           - stable
           - beta
           - nightly
-          - 1.37
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -33,6 +32,26 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+
+  check_msrv:
+    name: Check minimum rust version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.37
+          override: true
+
+      - name: Run cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
