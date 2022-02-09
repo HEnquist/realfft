@@ -145,14 +145,15 @@ type Res<T> = Result<T, FftError>;
 /// Custom error returned by FFTs
 #[derive(Debug)]
 pub enum FftError {
-    /// The input buffer has the wrong size.
+    /// The input buffer has the wrong size. The transform was not performed.
     InputBuffer(usize, usize),
-    /// The output buffer has the wrong size.
+    /// The output buffer has the wrong size. The transform was not performed.
     OutputBuffer(usize, usize),
-    /// The scratch buffer has the wrong size.
+    /// The scratch buffer has the wrong size. The transform was not performed.
     ScratchBuffer(usize, usize),
-    /// The input data is invalid, see description
-    InputValues(String),
+    /// The input data contained an invalid value, in the first and/or last value.
+    /// The transform was performed, but the result may not be correct.
+    InputValues(bool, bool),
 }
 
 impl fmt::Display for FftError {
@@ -170,7 +171,14 @@ impl fmt::Display for FftError {
                     got, expected
                 )
             }
-            Self::InputValues(desc) => desc.to_string(),
+            Self::InputValues(first, last) => match (first, last) {
+                (true, false) => "Imaginary part of first value was non-zero.".to_string(),
+                (false, true) => "Imaginary part of last value was non-zero.".to_string(),
+                (true, true) => {
+                    "Imaginary parts of both first and last values were non-zero.".to_string()
+                }
+                (false, false) => unreachable!(),
+            },
         };
         write!(f, "{}", desc)
     }
@@ -622,8 +630,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
-    /// result may not be correct.
+    /// these non-zero values are ignored and the transform is still performed.
+    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
@@ -634,8 +642,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
-    /// result may not be correct.
+    /// these non-zero values are ignored and the transform is still performed.
+    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -652,7 +660,12 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
             return Err(FftError::ScratchBuffer(self.length, scratch.len()));
         }
 
-        let first_invalid = input[0].im != T::from_f64(0.0).unwrap();
+        let first_invalid = if input[0].im != T::from_f64(0.0).unwrap() {
+            input[0].im = T::from_f64(0.0).unwrap();
+            true
+        } else {
+            false
+        };
 
         let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
 
@@ -671,9 +684,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
             *out = val.re;
         }
         if first_invalid {
-            return Err(FftError::InputValues(
-                "Imaginary part of first input value is non-zero".to_string(),
-            ));
+            return Err(FftError::InputValues(true, false));
         }
         Ok(())
     }
@@ -731,8 +742,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
-    /// result may not be correct.
+    /// these non-zero values are ignored and the transform is still performed.
+    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
@@ -743,8 +754,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
-    /// result may not be correct.
+    /// these non-zero values are ignored and the transform is still performed.
+    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -763,8 +774,18 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         if input.is_empty() {
             return Ok(());
         }
-        let first_invalid = input[0].im != T::from_f64(0.0).unwrap();
-        let last_invalid = input[input.len() - 1].im != T::from_f64(0.0).unwrap();
+        let first_invalid = if input[0].im != T::from_f64(0.0).unwrap() {
+            input[0].im = T::from_f64(0.0).unwrap();
+            true
+        } else {
+            false
+        };
+        let last_invalid = if input[input.len() - 1].im != T::from_f64(0.0).unwrap() {
+            input[input.len() - 1].im = T::from_f64(0.0).unwrap();
+            true
+        } else {
+            false
+        };
 
         let (mut input_left, mut input_right) = input.split_at_mut(input.len() / 2);
 
@@ -834,18 +855,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         };
         self.fft
             .process_outofplace_with_scratch(&mut input[..output.len() / 2], buf_out, scratch);
-        if first_invalid && last_invalid {
-            return Err(FftError::InputValues(
-                "Imaginary parts of both first and last input values are non-zero".to_string(),
-            ));
-        } else if first_invalid {
-            return Err(FftError::InputValues(
-                "Imaginary part of first input value is non-zero".to_string(),
-            ));
-        } else if last_invalid {
-            return Err(FftError::InputValues(
-                "Imaginary part of last input value is non-zero".to_string(),
-            ));
+        if first_invalid || last_invalid {
+            return Err(FftError::InputValues(first_invalid, last_invalid));
         }
         Ok(())
     }
@@ -980,7 +991,7 @@ mod tests {
         indata[50].im = 0.0;
         let res = c2r.process(&mut indata, &mut out_a);
         assert!(res.is_err());
-        assert!(matches!(res, Err(FftError::InputValues(_))));
+        assert!(matches!(res, Err(FftError::InputValues(true, false))));
 
         // Make some invalid data, last point invalid
         for val in indata.iter_mut() {
@@ -989,7 +1000,7 @@ mod tests {
         indata[0].im = 0.0;
         let res = c2r.process(&mut indata, &mut out_a);
         assert!(res.is_err());
-        assert!(matches!(res, Err(FftError::InputValues(_))));
+        assert!(matches!(res, Err(FftError::InputValues(false, true))));
     }
 
     // Test that ComplexToReal returns the right errors
@@ -1016,7 +1027,7 @@ mod tests {
         }
         let res = c2r.process(&mut indata, &mut out_a);
         assert!(res.is_err());
-        assert!(matches!(res, Err(FftError::InputValues(_))));
+        assert!(matches!(res, Err(FftError::InputValues(true, false))));
     }
 
     // Compare RealToComplex with standard FFT
