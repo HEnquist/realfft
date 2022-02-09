@@ -11,13 +11,13 @@ The FFT result is then post-processed to give only the first half of the complex
 The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
 
 The speed increase compared to just converting the input to a 2N long complex vector
-and using a 2N long FFT depends on the length f the input data.
+and using a 2N long FFT depends on the length of the input data.
 The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
 The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.
 
 ### Why use real-to-complex FFT?
 #### Using a complex-to-complex FFT
-A simple way to get the FFT of a rea values vector is to convert it to complex, and using a complex-to-complex FFT.
+A simple way to get the FFT of a real valued vector is to convert it to complex, and use a complex-to-complex FFT.
 
 Let's assume `x` is a 6 element long real vector:
 ```
@@ -44,16 +44,16 @@ As we can see, the output contains 6 independent values, and the rest is redunda
 But it still takes time for the FFT to calculate the redundant values.
 Converting the input data to complex also takes a little bit of time.
 
-If the length of `x` instead had been 7, result would have been:
+If the length of `x` instead had been 7, the result would have been:
 ```
 FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
 ```
 
-The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of indendent values as we started with.
+The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of independent values as we started with.
 
 #### Real-to-complex
 Using a real-to-complex FFT removes the need for converting the input data to complex.
-It also avoids caclulating the redundant output values.
+It also avoids calculating the redundant output values.
 
 The result for 6 elements is:
 ```
@@ -120,6 +120,8 @@ c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
 
 ### Versions
+- 3.0.0: Improved error reporting.
+- 2.0.1: Minor bugfix.
 - 2.0.0: Update RustFFT to 6.0.0 and num-complex to 0.4.0.
 - 1.1.0: Add missing Sync+Send.
 - 1.0.0: First version with new api.
