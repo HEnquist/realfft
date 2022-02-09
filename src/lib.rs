@@ -49,11 +49,11 @@
 //! FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
 //! ```
 //!
-//! The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of indendent values as we started with.
+//! The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of independent values as we started with.
 //!
 //! ### Real-to-complex
 //! Using a real-to-complex FFT removes the need for converting the input data to complex.
-//! It also avoids caclulating the redundant output values.
+//! It also avoids calculating the redundant output values.
 //!
 //! The result for 6 elements is:
 //! ```text
@@ -269,7 +269,7 @@ pub trait ComplexToReal<T>: Sync + Send {
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// the transform is still performed. The function then returns an `FftError::InputValues` error to tell that the
     /// result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()>;
 
@@ -278,7 +278,7 @@ pub trait ComplexToReal<T>: Sync + Send {
     /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValuess` error to tell that the
+    /// the transform is still performed. The function then returns an `FftError::InputValues` error to tell that the
     /// result may not be correct.
     fn process_with_scratch(
         &self,
@@ -554,9 +554,9 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
             let diff = *out - *out_rev;
             let half = T::from_f64(0.5).unwrap();
             // Apply twiddle factors. Theoretically we'd have to load 2 separate twiddle factors here, one for the beginning
-            // and one for the end. But the twiddle factor for the end is jsut the twiddle for the beginning, with the
+            // and one for the end. But the twiddle factor for the end is just the twiddle for the beginning, with the
             // real part negated. Since it's the same twiddle, we can factor out a ton of math ops and cut the number of
-            // multiplications in half
+            // multiplications in half.
             let twiddled_re_sum = sum * twiddle.re;
             let twiddled_im_sum = sum * twiddle.im;
             let twiddled_re_diff = diff * twiddle.re;
@@ -567,7 +567,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
             let output_twiddled_real = twiddled_re_sum.im + twiddled_im_diff.re;
             let output_twiddled_im = twiddled_im_sum.im - twiddled_re_diff.re;
 
-            // We finally have all the data we need to write the transformed data back out where we found it
+            // We finally have all the data we need to write the transformed data back out where we found it.
             *out = Complex {
                 re: half_sum_re + output_twiddled_real,
                 im: half_diff_im + output_twiddled_im,
@@ -579,7 +579,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
             };
         }
 
-        // If the output len is odd, the loop above can't postprocess the centermost element, so handle that separately
+        // If the output len is odd, the loop above can't postprocess the centermost element, so handle that separately.
         if output.len() % 2 == 1 {
             if let Some(center_element) = output.get_mut(output.len() / 2) {
                 center_element.im = -center_element.im;
@@ -792,7 +792,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         let (mut input_left, mut input_right) = input.split_at_mut(input.len() / 2);
 
         // We have to preprocess the input in-place before we send it to the FFT.
-        // The first and centermost values have to be preprocessed separately from the rest, so do that now
+        // The first and centermost values have to be preprocessed separately from the rest, so do that now.
         match (input_left.first_mut(), input_right.last_mut()) {
             (Some(first_input), Some(last_input)) => {
                 let first_sum = *first_input + *last_input;
@@ -810,7 +810,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             _ => return Ok(()),
         };
 
-        // now, in a loop, preprocess the rest of the elements 2 at a time
+        // now, in a loop, preprocess the rest of the elements 2 at a time.
         for (twiddle, fft_input, fft_input_rev) in zip3(
             self.twiddles.iter(),
             input_left.iter_mut(),
@@ -820,9 +820,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             let diff = *fft_input - *fft_input_rev;
 
             // Apply twiddle factors. Theoretically we'd have to load 2 separate twiddle factors here, one for the beginning
-            // and one for the end. But the twiddle factor for the end is jsut the twiddle for the beginning, with the
+            // and one for the end. But the twiddle factor for the end is just the twiddle for the beginning, with the
             // real part negated. Since it's the same twiddle, we can factor out a ton of math ops and cut the number of
-            // multiplications in half
+            // multiplications in half.
             let twiddled_re_sum = sum * twiddle.re;
             let twiddled_im_sum = sum * twiddle.im;
             let twiddled_re_diff = diff * twiddle.re;
@@ -831,7 +831,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             let output_twiddled_real = twiddled_re_sum.im + twiddled_im_diff.re;
             let output_twiddled_im = twiddled_im_sum.im - twiddled_re_diff.re;
 
-            // We finally have all the data we need to write our preprocessed data back where we got it from
+            // We finally have all the data we need to write our preprocessed data back where we got it from.
             *fft_input = Complex {
                 re: sum.re - output_twiddled_real,
                 im: diff.im - output_twiddled_im,

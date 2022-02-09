@@ -49,7 +49,7 @@ If the length of `x` instead had been 7, the result would have been:
 FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
 ```
 
-The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of indendent values as we started with.
+The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of independent values as we started with.
 
 #### Real-to-complex
 Using a real-to-complex FFT removes the need for converting the input data to complex.
