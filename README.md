@@ -11,13 +11,13 @@ The FFT result is then post-processed to give only the first half of the complex
 The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
 
 The speed increase compared to just converting the input to a 2N long complex vector
-and using a 2N long FFT depends on the length f the input data.
+and using a 2N long FFT depends on the length of the input data.
 The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
 The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.
 
 ### Why use real-to-complex FFT?
 #### Using a complex-to-complex FFT
-A simple way to get the FFT of a rea values vector is to convert it to complex, and using a complex-to-complex FFT.
+A simple way to get the FFT of a real valued vector is to convert it to complex, and use a complex-to-complex FFT.
 
 Let's assume `x` is a 6 element long real vector:
 ```
@@ -121,6 +121,7 @@ c2r.process(&mut spectrum, &mut outdata).unwrap();
 
 ### Versions
 - 3.0.0: Improved error reporting.
+- 2.0.1: Minor bugfix.
 - 2.0.0: Update RustFFT to 6.0.0 and num-complex to 0.4.0.
 - 1.1.0: Add missing Sync+Send.
 - 1.0.0: First version with new api.
