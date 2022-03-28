@@ -26,7 +26,7 @@ x = [x0r, x1r, x2r, x3r, x4r, x5r]
 
 We now convert `x` to complex by adding an imaginary part with value zero. Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
 ```
-x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0, (x5r, 0)]
+x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0), (x5r, 0)]
 ```
 
 Performing a normal complex FFT, the result of `FFT(x_c)` is:
