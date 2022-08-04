@@ -414,8 +414,9 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         if input.len() != self.length {
             return Err(FftError::InputBuffer(self.length, input.len()));
         }
-        if output.len() != (self.length / 2 + 1) {
-            return Err(FftError::OutputBuffer(self.length, output.len()));
+        let expected_output_buffer_size = self.length / 2 + 1;
+        if output.len() != expected_output_buffer_size {
+            return Err(FftError::OutputBuffer(expected_output_buffer_size, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.length, scratch.len()));
@@ -502,8 +503,9 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
         if input.len() != self.length {
             return Err(FftError::InputBuffer(self.length, input.len()));
         }
-        if output.len() != (self.length / 2 + 1) {
-            return Err(FftError::OutputBuffer(self.length, output.len()));
+        let expected_output_buffer_size = self.length / 2 + 1;
+        if output.len() != expected_output_buffer_size {
+            return Err(FftError::OutputBuffer(expected_output_buffer_size, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.length, scratch.len()));
@@ -652,8 +654,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
         output: &mut [T],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        if input.len() != (self.length / 2 + 1) {
-            return Err(FftError::InputBuffer(self.length, input.len()));
+        let expected_input_buffer_size = self.length / 2 + 1;
+        if input.len() != expected_input_buffer_size {
+            return Err(FftError::InputBuffer(expected_input_buffer_size, input.len()));
         }
         if output.len() != self.length {
             return Err(FftError::OutputBuffer(self.length, output.len()));
@@ -764,8 +767,9 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         output: &mut [T],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        if input.len() != (self.length / 2 + 1) {
-            return Err(FftError::InputBuffer(self.length, input.len()));
+        let expected_input_buffer_size = self.length / 2 + 1;
+        if input.len() != expected_input_buffer_size {
+            return Err(FftError::InputBuffer(expected_input_buffer_size, input.len()));
         }
         if output.len() != self.length {
             return Err(FftError::OutputBuffer(self.length, output.len()));
