@@ -440,7 +440,10 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         }
         let expected_output_buffer_size = self.length / 2 + 1;
         if output.len() != expected_output_buffer_size {
-            return Err(FftError::OutputBuffer(expected_output_buffer_size, output.len()));
+            return Err(FftError::OutputBuffer(
+                expected_output_buffer_size,
+                output.len(),
+            ));
         }
         if scratch.len() != (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.length, scratch.len()));
@@ -529,7 +532,10 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
         }
         let expected_output_buffer_size = self.length / 2 + 1;
         if output.len() != expected_output_buffer_size {
-            return Err(FftError::OutputBuffer(expected_output_buffer_size, output.len()));
+            return Err(FftError::OutputBuffer(
+                expected_output_buffer_size,
+                output.len(),
+            ));
         }
         if scratch.len() != (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.length, scratch.len()));
@@ -680,7 +686,10 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     ) -> Res<()> {
         let expected_input_buffer_size = self.length / 2 + 1;
         if input.len() != expected_input_buffer_size {
-            return Err(FftError::InputBuffer(expected_input_buffer_size, input.len()));
+            return Err(FftError::InputBuffer(
+                expected_input_buffer_size,
+                input.len(),
+            ));
         }
         if output.len() != self.length {
             return Err(FftError::OutputBuffer(self.length, output.len()));
@@ -793,7 +802,10 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     ) -> Res<()> {
         let expected_input_buffer_size = self.length / 2 + 1;
         if input.len() != expected_input_buffer_size {
-            return Err(FftError::InputBuffer(expected_input_buffer_size, input.len()));
+            return Err(FftError::InputBuffer(
+                expected_input_buffer_size,
+                input.len(),
+            ));
         }
         if output.len() != self.length {
             return Err(FftError::OutputBuffer(self.length, output.len()));
