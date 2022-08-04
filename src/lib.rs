@@ -161,16 +161,16 @@ pub enum FftError {
 impl fmt::Display for FftError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let desc = match self {
-            Self::InputBuffer(got, expected) => {
-                format!("Wrong length of input, expected {}, got {}", got, expected)
+            Self::InputBuffer(expected, got) => {
+                format!("Wrong length of input, expected {}, got {}", expected, got)
             }
-            Self::OutputBuffer(got, expected) => {
-                format!("Wrong length of output, expected {}, got {}", got, expected)
+            Self::OutputBuffer(expected, got) => {
+                format!("Wrong length of output, expected {}, got {}", expected, got)
             }
-            Self::ScratchBuffer(got, expected) => {
+            Self::ScratchBuffer(expected, got) => {
                 format!(
                     "Wrong length of scratch, expected {}, got {}",
-                    got, expected
+                    expected, got
                 )
             }
             Self::InputValues(first, last) => match (first, last) {
