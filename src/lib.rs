@@ -145,7 +145,6 @@ use std::sync::Arc;
 type Res<T> = Result<T, FftError>;
 
 /// Custom error returned by FFTs
-#[derive(Debug)]
 pub enum FftError {
     /// The input buffer has the wrong size. The transform was not performed.
     InputBuffer(usize, usize),
@@ -158,8 +157,8 @@ pub enum FftError {
     InputValues(bool, bool),
 }
 
-impl fmt::Display for FftError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl FftError {
+    fn fmt_internal(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let desc = match self {
             Self::InputBuffer(got, expected) => {
                 format!("Wrong length of input, expected {}, got {}", got, expected)
@@ -183,6 +182,18 @@ impl fmt::Display for FftError {
             },
         };
         write!(f, "{}", desc)
+    }
+}
+
+impl fmt::Debug for FftError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_internal(f)
+    }
+}
+
+impl fmt::Display for FftError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_internal(f)
     }
 }
 
