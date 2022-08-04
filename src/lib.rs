@@ -147,13 +147,26 @@ type Res<T> = Result<T, FftError>;
 /// Custom error returned by FFTs
 pub enum FftError {
     /// The input buffer has the wrong size. The transform was not performed.
+    ///
+    /// The first member of the tuple is the expected size and the second member is the received
+    /// size.
     InputBuffer(usize, usize),
     /// The output buffer has the wrong size. The transform was not performed.
+    ///
+    /// The first member of the tuple is the expected size and the second member is the received
+    /// size.
     OutputBuffer(usize, usize),
     /// The scratch buffer has the wrong size. The transform was not performed.
+    ///
+    /// The first member of the tuple is the expected size and the second member is the received
+    /// size.
     ScratchBuffer(usize, usize),
     /// The input data contained a non-zero imaginary part where there should have been a zero.
     /// The transform was performed, but the result may not be correct.
+    ///
+    /// The first member of the tuple represents the first index of the complex buffer and the
+    /// second member represents the last index of the complex buffer. The values are set to true
+    /// if the corresponding complex value contains a non-zero imaginary part.
     InputValues(bool, bool),
 }
 
