@@ -1046,7 +1046,7 @@ mod tests {
             }
             let mut rustfft_check = indata
                 .iter()
-                .map(|val| Complex::from(val))
+                .map(Complex::from)
                 .collect::<Vec<Complex<f64>>>();
             let mut fft_planner = FftPlanner::<f64>::new();
             let fft = fft_planner.plan_fft_forward(length);
