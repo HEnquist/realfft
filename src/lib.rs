@@ -26,7 +26,7 @@
 //!
 //! We now convert `x` to complex by adding an imaginary part with value zero. Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
 //! ```text
-//! x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0, (x5r, 0)]
+//! x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0), (x5r, 0)]
 //! ```
 //!
 //! Performing a normal complex FFT, the result of `FFT(x_c)` is:
@@ -120,6 +120,7 @@
 //! ```
 //!
 //! ### Versions
+//! - 3.0.1: More helpful error messages, fix confusing typos.
 //! - 3.0.0: Improved error reporting.
 //! - 2.0.1: Minor bugfix.
 //! - 2.0.0: Update RustFFT to 6.0.0 and num-complex to 0.4.0.

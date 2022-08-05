@@ -120,6 +120,7 @@ c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
 
 ### Versions
+- 3.0.1: More helpful error messages, fix confusing typos.
 - 3.0.0: Improved error reporting.
 - 2.0.1: Minor bugfix.
 - 2.0.0: Update RustFFT to 6.0.0 and num-complex to 0.4.0.
