@@ -357,10 +357,10 @@ impl<T: FftNum> RealFftPlanner<T> {
         len: usize,
     ) -> Arc<dyn RealToComplex<T, FFT_SIZE>> {
         if len % 2 > 0 {
-            Arc::new(RealToComplexOdd::new(len, &mut self.planner))
+            Arc::new(RealToComplexOdd::new(&mut self.planner))
                 as Arc<dyn RealToComplex<T, FFT_SIZE>>
         } else {
-            Arc::new(RealToComplexEven::new(len, &mut self.planner))
+            Arc::new(RealToComplexEven::new(&mut self.planner))
                 as Arc<dyn RealToComplex<T, FFT_SIZE>>
         }
     }
@@ -385,14 +385,14 @@ impl<T: FftNum> Default for RealFftPlanner<T> {
 impl<T: FftNum, const FFT_SIZE: usize> RealToComplexOdd<T, FFT_SIZE> {
     /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
-    pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
-        if length % 2 == 0 {
-            panic!("Length must be odd, got {}", length,);
+    pub fn new(fft_planner: &mut FftPlanner<T>) -> Self {
+        if FFT_SIZE % 2 == 0 {
+            panic!("Length must be odd, got {}", FFT_SIZE);
         }
-        let fft = fft_planner.plan_fft_forward(length);
-        let scratch_len = fft.get_inplace_scratch_len() + length;
+        let fft = fft_planner.plan_fft_forward(FFT_SIZE);
+        let scratch_len = fft.get_inplace_scratch_len() + FFT_SIZE;
         RealToComplexOdd {
-            length,
+            length: FFT_SIZE,
             fft,
             scratch_len,
         }
@@ -469,24 +469,24 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
 impl<T: FftNum, const FFT_SIZE: usize> RealToComplexEven<T, FFT_SIZE> {
     /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
-    pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
-        if length % 2 > 0 {
-            panic!("Length must be even, got {}", length,);
+    pub fn new(fft_planner: &mut FftPlanner<T>) -> Self {
+        if FFT_SIZE % 2 > 0 {
+            panic!("Length must be even, got {}", FFT_SIZE,);
         }
-        let twiddle_count = if length % 4 == 0 {
-            length / 4
+        let twiddle_count = if FFT_SIZE % 4 == 0 {
+            FFT_SIZE / 4
         } else {
-            length / 4 + 1
+            FFT_SIZE / 4 + 1
         };
         let twiddles: Vec<Complex<T>> = (1..twiddle_count)
-            .map(|i| compute_twiddle(i, length) * T::from_f64(0.5).unwrap())
+            .map(|i| compute_twiddle(i, FFT_SIZE) * T::from_f64(0.5).unwrap())
             .collect();
         //let mut fft_planner = FftPlanner::<T>::new();
-        let fft = fft_planner.plan_fft_forward(length / 2);
+        let fft = fft_planner.plan_fft_forward(FFT_SIZE / 2);
         let scratch_len = fft.get_outofplace_scratch_len();
         RealToComplexEven {
             twiddles,
-            length,
+            length: FFT_SIZE,
             fft,
             scratch_len,
         }
