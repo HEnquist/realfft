@@ -14,8 +14,8 @@ fn main() {
         .map(|_| {
             let fft_copy = Arc::clone(&fft);
             thread::spawn(move || {
-                let mut data = fft_copy.make_input_vec();
-                let mut output = fft_copy.make_output_vec();
+                let mut data = fft_copy.make_input();
+                let mut output = fft_copy.make_output();
                 fft_copy.process(&mut data, &mut output).unwrap();
             })
         })

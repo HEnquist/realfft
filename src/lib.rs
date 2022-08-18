@@ -101,8 +101,8 @@
 //! // create a FFT
 //! let r2c = real_planner.plan_fft_forward::<LENGTH>(LENGTH);
 //! // make input and output vectors
-//! let mut indata = r2c.make_input_vec();
-//! let mut spectrum = r2c.make_output_vec();
+//! let mut indata = r2c.make_input();
+//! let mut spectrum = r2c.make_output();
 //!
 //! // Are they the LENGTH we expect?
 //! assert_eq!(indata.len(), LENGTH);
@@ -129,6 +129,9 @@
 //! ### Compatibility
 //!
 //! The `realfft` crate requires rustc version 1.37 or newer.
+
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 pub use rustfft::num_complex;
 pub use rustfft::num_traits;
@@ -252,7 +255,11 @@ pub trait RealToComplex<T, const FFT_SIZE: usize>: Sync + Send {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()>;
+    fn process(
+        &self,
+        input: &mut [T; FFT_SIZE],
+        output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
+    ) -> Res<()>;
 
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
@@ -272,10 +279,10 @@ pub trait RealToComplex<T, const FFT_SIZE: usize>: Sync + Send {
     fn len(&self) -> usize;
 
     /// Convenience method to make an input vector of the right type and length.
-    fn make_input_vec(&self) -> Vec<T>;
+    fn make_input(&self) -> [T; FFT_SIZE];
 
     /// Convenience method to make an output vector of the right type and length.
-    fn make_output_vec(&self) -> Vec<Complex<T>>;
+    fn make_output(&self) -> [Complex<T>; FFT_SIZE / 2 + 1];
 
     /// Convenience method to make a scratch vector of the right type and length.
     fn make_scratch_vec(&self) -> Vec<Complex<T>>;
@@ -400,7 +407,11 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
+    fn process(
+        &self,
+        input: &mut [T; FFT_SIZE],
+        output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
+    ) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
@@ -447,12 +458,12 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         FFT_SIZE
     }
 
-    fn make_input_vec(&self) -> Vec<T> {
-        vec![T::zero(); self.len()]
+    fn make_input(&self) -> [T; FFT_SIZE] {
+        [T::zero(); FFT_SIZE]
     }
 
-    fn make_output_vec(&self) -> Vec<Complex<T>> {
-        vec![Complex::zero(); self.len() / 2 + 1]
+    fn make_output(&self) -> [Complex<T>; FFT_SIZE / 2 + 1] {
+        [Complex::zero(); FFT_SIZE / 2 + 1]
     }
 
     fn make_scratch_vec(&self) -> Vec<Complex<T>> {
@@ -493,7 +504,11 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
+    fn process(
+        &self,
+        input: &mut [T; FFT_SIZE],
+        output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
+    ) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
@@ -608,12 +623,12 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         FFT_SIZE
     }
 
-    fn make_input_vec(&self) -> Vec<T> {
-        vec![T::zero(); self.len()]
+    fn make_input(&self) -> [T; FFT_SIZE] {
+        [T::zero(); FFT_SIZE]
     }
 
-    fn make_output_vec(&self) -> Vec<Complex<T>> {
-        vec![Complex::zero(); self.len() / 2 + 1]
+    fn make_output(&self) -> [Complex<T>; FFT_SIZE / 2 + 1] {
+        [Complex::zero(); FFT_SIZE / 2 + 1]
     }
 
     fn make_scratch_vec(&self) -> Vec<Complex<T>> {
@@ -1059,8 +1074,8 @@ mod tests {
         const LENGTH: usize = 1000;
         let mut real_planner = RealFftPlanner::<f64>::new();
         let r2c = real_planner.plan_fft_forward::<LENGTH>(LENGTH);
-        let mut out_a = r2c.make_output_vec();
-        let mut indata = r2c.make_input_vec();
+        let mut out_a = r2c.make_output();
+        let mut indata = r2c.make_input();
         let mut rng = rand::thread_rng();
         for val in indata.iter_mut() {
             *val = rng.gen::<f64>();
@@ -1088,8 +1103,8 @@ mod tests {
     fn test_error() -> Result<(), Box<dyn Error>> {
         let mut real_planner = RealFftPlanner::<f64>::new();
         let r2c = real_planner.plan_fft_forward::<100>(100);
-        let mut out_a = r2c.make_output_vec();
-        let mut indata = r2c.make_input_vec();
+        let mut out_a = r2c.make_output();
+        let mut indata = r2c.make_input();
         r2c.process(&mut indata, &mut out_a)?;
         Ok(())
     }
