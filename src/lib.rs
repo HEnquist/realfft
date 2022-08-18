@@ -267,8 +267,8 @@ pub trait RealToComplex<T, const FFT_SIZE: usize>: Sync + Send {
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
-        input: &mut [T],
-        output: &mut [Complex<T>],
+        input: &mut [T; FFT_SIZE],
+        output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
         scratch: &mut [Complex<T>],
     ) -> Res<()>;
 
@@ -422,8 +422,8 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
-        input: &mut [T],
-        output: &mut [Complex<T>],
+        input: &mut [T; FFT_SIZE],
+        output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
         if input.len() != FFT_SIZE {
@@ -519,8 +519,8 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
-        input: &mut [T],
-        output: &mut [Complex<T>],
+        input: &mut [T; FFT_SIZE],
+        output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
         if input.len() != FFT_SIZE {
@@ -547,7 +547,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         // FFT and store result in buffer_out
         self.fft
             .process_outofplace_with_scratch(buf_in, &mut output[0..fftlen], scratch);
-        let (mut output_left, mut output_right) = output.split_at_mut(output.len() / 2);
+        let (mut output_left, mut output_right) = output.split_at_mut((FFT_SIZE / 2 + 1) / 2);
 
         // The first and last element don't require any twiddle factors, so skip that work
         match (output_left.first_mut(), output_right.last_mut()) {
@@ -609,7 +609,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
 
         // If the output len is odd, the loop above can't postprocess the centermost element, so handle that separately.
         if output.len() % 2 == 1 {
-            if let Some(center_element) = output.get_mut(output.len() / 2) {
+            if let Some(center_element) = output.get_mut((FFT_SIZE / 2 + 1) / 2) {
                 center_element.im = -center_element.im;
             }
         }
