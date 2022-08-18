@@ -93,28 +93,28 @@
 //! use rustfft::num_complex::Complex;
 //! use rustfft::num_traits::Zero;
 //!
-//! let length = 256;
+//! const LENGTH: usize = 256;
 //!
 //! // make a planner
 //! let mut real_planner = RealFftPlanner::<f64>::new();
 //!
 //! // create a FFT
-//! let r2c = real_planner.plan_fft_forward(length);
+//! let r2c = real_planner.plan_fft_forward::<LENGTH>(LENGTH);
 //! // make input and output vectors
 //! let mut indata = r2c.make_input_vec();
 //! let mut spectrum = r2c.make_output_vec();
 //!
-//! // Are they the length we expect?
-//! assert_eq!(indata.len(), length);
-//! assert_eq!(spectrum.len(), length/2+1);
+//! // Are they the LENGTH we expect?
+//! assert_eq!(indata.len(), LENGTH);
+//! assert_eq!(spectrum.len(), LENGTH/2+1);
 //!
 //! // Forward transform the input data
 //! r2c.process(&mut indata, &mut spectrum).unwrap();
 //!
 //! // create an iFFT and an output vector
-//! let c2r = real_planner.plan_fft_inverse(length);
+//! let c2r = real_planner.plan_fft_inverse(LENGTH);
 //! let mut outdata = c2r.make_output_vec();
-//! assert_eq!(outdata.len(), length);
+//! assert_eq!(outdata.len(), LENGTH);
 //!
 //! c2r.process(&mut spectrum, &mut outdata).unwrap();
 //! ```
@@ -137,7 +137,6 @@ pub use rustfft::FftNum;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
 use rustfft::FftPlanner;
-use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::sync::Arc;
@@ -221,13 +220,13 @@ fn compute_twiddle<T: FftNum>(index: usize, fft_len: usize) -> Complex<T> {
     }
 }
 
-pub struct RealToComplexOdd<T> {
+pub struct RealToComplexOdd<T, const FFT_SIZE: usize> {
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
 
-pub struct RealToComplexEven<T> {
+pub struct RealToComplexEven<T, const FFT_SIZE: usize> {
     twiddles: Vec<Complex<T>>,
     length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
@@ -250,7 +249,7 @@ pub struct ComplexToRealEven<T> {
 /// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
 #[allow(clippy::len_without_is_empty)]
-pub trait RealToComplex<T>: Sync + Send {
+pub trait RealToComplex<T, const FFT_SIZE: usize>: Sync + Send {
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
@@ -342,52 +341,37 @@ where
 /// so when making more than one FFT it is advisable to reuse the same planner.
 pub struct RealFftPlanner<T: FftNum> {
     planner: FftPlanner<T>,
-    r2c_cache: HashMap<usize, Arc<dyn RealToComplex<T>>>,
-    c2r_cache: HashMap<usize, Arc<dyn ComplexToReal<T>>>,
 }
 
 impl<T: FftNum> RealFftPlanner<T> {
     /// Create a new planner.
     pub fn new() -> Self {
         let planner = FftPlanner::<T>::new();
-        Self {
-            r2c_cache: HashMap::new(),
-            c2r_cache: HashMap::new(),
-            planner,
-        }
+        Self { planner }
     }
 
     /// Plan a Real-to-Complex forward FFT. Returns the FFT in a shared reference.
     /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
-    pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
-        if let Some(fft) = self.r2c_cache.get(&len) {
-            Arc::clone(fft)
+    pub fn plan_fft_forward<const FFT_SIZE: usize>(
+        &mut self,
+        len: usize,
+    ) -> Arc<dyn RealToComplex<T, FFT_SIZE>> {
+        if len % 2 > 0 {
+            Arc::new(RealToComplexOdd::new(len, &mut self.planner))
+                as Arc<dyn RealToComplex<T, FFT_SIZE>>
         } else {
-            let fft = if len % 2 > 0 {
-                Arc::new(RealToComplexOdd::new(len, &mut self.planner)) as Arc<dyn RealToComplex<T>>
-            } else {
-                Arc::new(RealToComplexEven::new(len, &mut self.planner))
-                    as Arc<dyn RealToComplex<T>>
-            };
-            self.r2c_cache.insert(len, Arc::clone(&fft));
-            fft
+            Arc::new(RealToComplexEven::new(len, &mut self.planner))
+                as Arc<dyn RealToComplex<T, FFT_SIZE>>
         }
     }
 
     /// Plan a Complex-to-Real inverse FFT. Returns the FFT in a shared reference.
     /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
     pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
-        if let Some(fft) = self.c2r_cache.get(&len) {
-            Arc::clone(fft)
+        if len % 2 > 0 {
+            Arc::new(ComplexToRealOdd::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
         } else {
-            let fft = if len % 2 > 0 {
-                Arc::new(ComplexToRealOdd::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
-            } else {
-                Arc::new(ComplexToRealEven::new(len, &mut self.planner))
-                    as Arc<dyn ComplexToReal<T>>
-            };
-            self.c2r_cache.insert(len, Arc::clone(&fft));
-            fft
+            Arc::new(ComplexToRealEven::new(len, &mut self.planner)) as Arc<dyn ComplexToReal<T>>
         }
     }
 }
@@ -398,7 +382,7 @@ impl<T: FftNum> Default for RealFftPlanner<T> {
     }
 }
 
-impl<T: FftNum> RealToComplexOdd<T> {
+impl<T: FftNum, const FFT_SIZE: usize> RealToComplexOdd<T, FFT_SIZE> {
     /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
@@ -415,7 +399,9 @@ impl<T: FftNum> RealToComplexOdd<T> {
     }
 }
 
-impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
+impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
+    for RealToComplexOdd<T, FFT_SIZE>
+{
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
@@ -480,7 +466,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     }
 }
 
-impl<T: FftNum> RealToComplexEven<T> {
+impl<T: FftNum, const FFT_SIZE: usize> RealToComplexEven<T, FFT_SIZE> {
     /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
@@ -507,7 +493,9 @@ impl<T: FftNum> RealToComplexEven<T> {
     }
 }
 
-impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
+impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
+    for RealToComplexEven<T, FFT_SIZE>
+{
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
@@ -1075,39 +1063,38 @@ mod tests {
     // Compare RealToComplex with standard FFT
     #[test]
     fn real_to_complex() {
-        for length in 1..1000 {
-            let mut real_planner = RealFftPlanner::<f64>::new();
-            let r2c = real_planner.plan_fft_forward(length);
-            let mut out_a = r2c.make_output_vec();
-            let mut indata = r2c.make_input_vec();
-            let mut rng = rand::thread_rng();
-            for val in indata.iter_mut() {
-                *val = rng.gen::<f64>();
-            }
-            let mut rustfft_check = indata
-                .iter()
-                .map(Complex::from)
-                .collect::<Vec<Complex<f64>>>();
-            let mut fft_planner = FftPlanner::<f64>::new();
-            let fft = fft_planner.plan_fft_forward(length);
-
-            fft.process(&mut rustfft_check);
-            r2c.process(&mut indata, &mut out_a).unwrap();
-            let maxdiff = compare_complex(&out_a, &rustfft_check[0..(length / 2 + 1)]);
-            assert!(
-                maxdiff < 1.0e-9,
-                "Length: {}, too large error: {}",
-                length,
-                maxdiff
-            );
+        const LENGTH: usize = 1000;
+        let mut real_planner = RealFftPlanner::<f64>::new();
+        let r2c = real_planner.plan_fft_forward::<LENGTH>(LENGTH);
+        let mut out_a = r2c.make_output_vec();
+        let mut indata = r2c.make_input_vec();
+        let mut rng = rand::thread_rng();
+        for val in indata.iter_mut() {
+            *val = rng.gen::<f64>();
         }
+        let mut rustfft_check = indata
+            .iter()
+            .map(Complex::from)
+            .collect::<Vec<Complex<f64>>>();
+        let mut fft_planner = FftPlanner::<f64>::new();
+        let fft = fft_planner.plan_fft_forward(LENGTH);
+
+        fft.process(&mut rustfft_check);
+        r2c.process(&mut indata, &mut out_a).unwrap();
+        let maxdiff = compare_complex(&out_a, &rustfft_check[0..(LENGTH / 2 + 1)]);
+        assert!(
+            maxdiff < 1.0e-9,
+            "Length: {}, too large error: {}",
+            LENGTH,
+            maxdiff
+        );
     }
 
     // Check that the ? operator works on the custom errors. No need to run, just needs to compile.
     #[allow(dead_code)]
     fn test_error() -> Result<(), Box<dyn Error>> {
         let mut real_planner = RealFftPlanner::<f64>::new();
-        let r2c = real_planner.plan_fft_forward(100);
+        let r2c = real_planner.plan_fft_forward::<100>(100);
         let mut out_a = r2c.make_output_vec();
         let mut indata = r2c.make_input_vec();
         r2c.process(&mut indata, &mut out_a)?;

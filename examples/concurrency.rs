@@ -7,7 +7,8 @@ use realfft::RealFftPlanner;
 
 fn main() {
     let mut planner = RealFftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(100);
+    const LENGTH: usize = 100;
+    let fft = planner.plan_fft_forward::<LENGTH>(LENGTH);
 
     let threads: Vec<thread::JoinHandle<_>> = (0..2)
         .map(|_| {
