@@ -1089,4 +1089,10 @@ mod tests {
         r2c.process(&mut indata, &mut out_a)?;
         Ok(())
     }
+
+    #[test]
+    fn compiler_does_not_allow_incorrect_buffer_sizes() {
+        let test_case = trybuild::TestCases::new();
+        test_case.compile_fail("compilation_tests/*.rs");
+    }
 }

@@ -18,6 +18,7 @@ rustfft = "6.0.0"
 [dev-dependencies]
 criterion = "0.3"
 rand = "0.8.3"
+trybuild = "1.0.64"
 
 [[bench]]
 name = "realfft"
