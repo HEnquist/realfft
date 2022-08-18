@@ -221,14 +221,12 @@ fn compute_twiddle<T: FftNum>(index: usize, fft_len: usize) -> Complex<T> {
 }
 
 pub struct RealToComplexOdd<T, const FFT_SIZE: usize> {
-    length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
 
 pub struct RealToComplexEven<T, const FFT_SIZE: usize> {
     twiddles: Vec<Complex<T>>,
-    length: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<T>>,
     scratch_len: usize,
 }
@@ -391,11 +389,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplexOdd<T, FFT_SIZE> {
         }
         let fft = fft_planner.plan_fft_forward(FFT_SIZE);
         let scratch_len = fft.get_inplace_scratch_len() + FFT_SIZE;
-        RealToComplexOdd {
-            length: FFT_SIZE,
-            fft,
-            scratch_len,
-        }
+        RealToComplexOdd { fft, scratch_len }
     }
 }
 
@@ -421,10 +415,10 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         output: &mut [Complex<T>],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        if input.len() != self.length {
-            return Err(FftError::InputBuffer(self.length, input.len()));
+        if input.len() != FFT_SIZE {
+            return Err(FftError::InputBuffer(FFT_SIZE, input.len()));
         }
-        let expected_output_buffer_size = self.length / 2 + 1;
+        let expected_output_buffer_size = FFT_SIZE / 2 + 1;
         if output.len() != expected_output_buffer_size {
             return Err(FftError::OutputBuffer(
                 expected_output_buffer_size,
@@ -432,16 +426,16 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
             ));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
+            return Err(FftError::ScratchBuffer(FFT_SIZE, scratch.len()));
         }
-        let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
+        let (buffer, fft_scratch) = scratch.split_at_mut(FFT_SIZE);
 
         for (val, buf) in input.iter().zip(buffer.iter_mut()) {
             *buf = Complex::new(*val, T::zero());
         }
         // FFT and store result in buffer_out
         self.fft.process_with_scratch(buffer, fft_scratch);
-        output.copy_from_slice(&buffer[0..self.length / 2 + 1]);
+        output.copy_from_slice(&buffer[0..FFT_SIZE / 2 + 1]);
         Ok(())
     }
 
@@ -450,7 +444,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
     }
 
     fn len(&self) -> usize {
-        self.length
+        FFT_SIZE
     }
 
     fn make_input_vec(&self) -> Vec<T> {
@@ -486,7 +480,6 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplexEven<T, FFT_SIZE> {
         let scratch_len = fft.get_outofplace_scratch_len();
         RealToComplexEven {
             twiddles,
-            length: FFT_SIZE,
             fft,
             scratch_len,
         }
@@ -515,10 +508,10 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         output: &mut [Complex<T>],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        if input.len() != self.length {
-            return Err(FftError::InputBuffer(self.length, input.len()));
+        if input.len() != FFT_SIZE {
+            return Err(FftError::InputBuffer(FFT_SIZE, input.len()));
         }
-        let expected_output_buffer_size = self.length / 2 + 1;
+        let expected_output_buffer_size = FFT_SIZE / 2 + 1;
         if output.len() != expected_output_buffer_size {
             return Err(FftError::OutputBuffer(
                 expected_output_buffer_size,
@@ -526,10 +519,10 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
             ));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
+            return Err(FftError::ScratchBuffer(FFT_SIZE, scratch.len()));
         }
 
-        let fftlen = self.length / 2;
+        let fftlen = FFT_SIZE / 2;
         let buf_in = unsafe {
             let ptr = input.as_mut_ptr() as *mut Complex<T>;
             let len = input.len();
@@ -612,7 +605,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
     }
 
     fn len(&self) -> usize {
-        self.length
+        FFT_SIZE
     }
 
     fn make_input_vec(&self) -> Vec<T> {
