@@ -99,7 +99,7 @@
 //! let mut real_planner = RealFftPlanner::<f64>::new();
 //!
 //! // create a FFT
-//! let r2c = real_planner.plan_fft_forward::<LENGTH>(LENGTH);
+//! let r2c = real_planner.plan_fft_forward::<LENGTH>();
 //! // make input and output vectors
 //! let mut indata = r2c.make_input();
 //! let mut spectrum = r2c.make_output();
@@ -359,9 +359,8 @@ impl<T: FftNum> RealFftPlanner<T> {
     /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
     pub fn plan_fft_forward<const FFT_SIZE: usize>(
         &mut self,
-        len: usize,
     ) -> Arc<dyn RealToComplex<T, FFT_SIZE>> {
-        if len % 2 > 0 {
+        if FFT_SIZE % 2 > 0 {
             Arc::new(RealToComplexOdd::new(&mut self.planner))
                 as Arc<dyn RealToComplex<T, FFT_SIZE>>
         } else {
@@ -1055,7 +1054,7 @@ mod tests {
     fn real_to_complex() {
         const LENGTH: usize = 1000;
         let mut real_planner = RealFftPlanner::<f64>::new();
-        let r2c = real_planner.plan_fft_forward::<LENGTH>(LENGTH);
+        let r2c = real_planner.plan_fft_forward::<LENGTH>();
         let mut out_a = r2c.make_output();
         let mut indata = r2c.make_input();
         let mut rng = rand::thread_rng();
@@ -1084,7 +1083,7 @@ mod tests {
     #[allow(dead_code)]
     fn test_error() -> Result<(), Box<dyn Error>> {
         let mut real_planner = RealFftPlanner::<f64>::new();
-        let r2c = real_planner.plan_fft_forward::<100>(100);
+        let r2c = real_planner.plan_fft_forward::<100>();
         let mut out_a = r2c.make_output();
         let mut indata = r2c.make_input();
         r2c.process(&mut indata, &mut out_a)?;
