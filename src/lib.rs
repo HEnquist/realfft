@@ -426,16 +426,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        if input.len() != FFT_SIZE {
-            return Err(FftError::InputBuffer(FFT_SIZE, input.len()));
-        }
-        let expected_output_buffer_size = FFT_SIZE / 2 + 1;
-        if output.len() != expected_output_buffer_size {
-            return Err(FftError::OutputBuffer(
-                expected_output_buffer_size,
-                output.len(),
-            ));
-        }
+        // Compiler now checks that input and output are the correct sizes
         if scratch.len() != (self.scratch_len) {
             return Err(FftError::ScratchBuffer(FFT_SIZE, scratch.len()));
         }
@@ -523,16 +514,7 @@ impl<T: FftNum, const FFT_SIZE: usize> RealToComplex<T, FFT_SIZE>
         output: &mut [Complex<T>; FFT_SIZE / 2 + 1],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        if input.len() != FFT_SIZE {
-            return Err(FftError::InputBuffer(FFT_SIZE, input.len()));
-        }
-        let expected_output_buffer_size = FFT_SIZE / 2 + 1;
-        if output.len() != expected_output_buffer_size {
-            return Err(FftError::OutputBuffer(
-                expected_output_buffer_size,
-                output.len(),
-            ));
-        }
+        // Compiler now checks that input and output are the correct sizes
         if scratch.len() != (self.scratch_len) {
             return Err(FftError::ScratchBuffer(FFT_SIZE, scratch.len()));
         }
