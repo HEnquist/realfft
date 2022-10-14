@@ -447,7 +447,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
             ));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
+            return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
         let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
 
@@ -539,7 +539,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
             ));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
+            return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
 
         let fftlen = self.length / 2;
@@ -696,7 +696,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
             return Err(FftError::OutputBuffer(self.length, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
+            return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
 
         let first_invalid = if input[0].im != T::from_f64(0.0).unwrap() {
@@ -812,7 +812,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             return Err(FftError::OutputBuffer(self.length, output.len()));
         }
         if scratch.len() != (self.scratch_len) {
-            return Err(FftError::ScratchBuffer(self.length, scratch.len()));
+            return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
         if input.is_empty() {
             return Ok(());
