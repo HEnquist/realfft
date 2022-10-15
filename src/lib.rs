@@ -5,21 +5,21 @@
 //!
 //! Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
 //! If the length is even, it also enables faster computations by using a complex FFT of half the length.
-//! It then packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
-//! The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex vector.
+//! It then packs a 2N long real signal into an N long complex signal, which is transformed using a standard FFT.
+//! The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex signal.
 //!
 //! The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
 //!
-//! The speed increase compared to just converting the input to a 2N long complex vector
+//! The speed increase compared to just converting the input to a 2N long complex signal
 //! and using a 2N long FFT depends on the length of the input data.
 //! The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
 //! The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.  
 //!
 //! ## Why use real-to-complex FFT?
 //! ### Using a complex-to-complex FFT
-//! A simple way to get the FFT of a real valued vector is to convert it to complex, and using a complex-to-complex FFT.
+//! A simple way to get the FFT of a real valued signal is to convert it to complex, and using a complex-to-complex FFT.
 //!
-//! Let's assume `x` is a 6 element long real vector:
+//! Let's assume `x` is a 6 element long real signal:
 //! ```text
 //! x = [x0r, x1r, x2r, x3r, x4r, x5r]
 //! ```
@@ -87,7 +87,7 @@
 //! To view, open `target/criterion/report/index.html` in a browser.
 //!
 //! ## Example
-//! Transform a vector, and then inverse transform the result.
+//! Transform a signal, and then inverse transform the result.
 //! ```
 //! use realfft::RealFftPlanner;
 //! use rustfft::num_complex::Complex;
@@ -100,7 +100,7 @@
 //!
 //! // create a FFT
 //! let r2c = real_planner.plan_fft_forward(length);
-//! // make input and output vectors
+//! // make input and output buffers
 //! let mut indata = r2c.make_input_buffer();
 //! let mut spectrum = r2c.make_output_buffer();
 //!
@@ -111,7 +111,7 @@
 //! // Forward transform the input data
 //! r2c.process(&mut indata, &mut spectrum).unwrap();
 //!
-//! // create an iFFT and an output vector
+//! // create an iFFT and an output buffer
 //! let c2r = real_planner.plan_fft_inverse(length);
 //! let mut outdata = c2r.make_output_buffer();
 //! assert_eq!(outdata.len(), length);
@@ -247,19 +247,19 @@ pub struct ComplexToRealEven<T> {
     scratch_len: usize,
 }
 
-/// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
+/// An FFT that takes a real-valued input signal of length 2*N and transforms it to a complex
 /// spectrum of length N+1.
 #[allow(clippy::len_without_is_empty)]
 pub trait RealToComplex<T>: Sync + Send {
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
+    /// Transform a signal of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output signal.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()>;
 
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
+    /// Transform a signal of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output signal.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// It also uses the provided scratch buffer instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
@@ -274,17 +274,17 @@ pub trait RealToComplex<T>: Sync + Send {
     /// Get the number of points that this FFT can process.
     fn len(&self) -> usize;
 
-    /// Convenience method to make an input vector of the right type and length.
+    /// Convenience method to make an input buffer of the right type and length.
     fn make_input_buffer(&self) -> Box<[T]>;
 
-    /// Convenience method to make an output vector of the right type and length.
+    /// Convenience method to make an output buffer of the right type and length.
     fn make_output_buffer(&self) -> Box<[Complex<T>]>;
 
-    /// Convenience method to make a scratch vector of the right type and length.
+    /// Convenience method to make a scratch buffer of the right type and length.
     fn make_scratch_buffer(&self) -> Box<[Complex<T>]>;
 }
 
-/// An FFT that takes a complex-valued input vector of length N+1 and transforms it to a complex
+/// An FFT that takes a complex-valued input signal of length N+1 and transforms it to a complex
 /// spectrum of length 2*N.
 #[allow(clippy::len_without_is_empty)]
 pub trait ComplexToReal<T>: Sync + Send {
@@ -299,7 +299,7 @@ pub trait ComplexToReal<T>: Sync + Send {
 
     /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the 2*N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// It also uses the provided scratch buffer instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
     /// the transform is still performed. The function then returns an `FftError::InputValues` error to tell that the
@@ -317,13 +317,13 @@ pub trait ComplexToReal<T>: Sync + Send {
     /// Get the number of points that this FFT can process.
     fn len(&self) -> usize;
 
-    /// Convenience method to make an input vector of the right type and length.
+    /// Convenience method to make an input buffer of the right type and length.
     fn make_input_buffer(&self) -> Box<[Complex<T>]>;
 
-    /// Convenience method to make an output vector of the right type and length.
+    /// Convenience method to make an output buffer of the right type and length.
     fn make_output_buffer(&self) -> Box<[T]>;
 
-    /// Convenience method to make a scratch vector of the right type and length.
+    /// Convenience method to make a scratch buffer of the right type and length.
     fn make_scratch_buffer(&self) -> Box<[Complex<T>]>;
 }
 
@@ -416,7 +416,7 @@ impl<T: FftNum> RealToComplexOdd<T> {
 }
 
 impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
+    /// Transform a signal of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output signal.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
@@ -425,9 +425,9 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
+    /// Transform a signal of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output signal.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// It also uses the provided scratch buffer instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
@@ -508,7 +508,7 @@ impl<T: FftNum> RealToComplexEven<T> {
 }
 
 impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
+    /// Transform a signal of N real-valued samples, storing the result in the N/2+1 element long complex output signal.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
@@ -517,9 +517,9 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
+    /// Transform a signal of N real-valued samples, storing the result in the N/2+1 element long complex output signal.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// It also uses the provided scratch buffer instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
@@ -673,7 +673,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
 
     /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// It also uses the provided scratch buffer instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
     /// these non-zero values are ignored and the transform is still performed.
@@ -789,7 +789,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
 
     /// Transform a complex spectrum of N/2+1 values and store the real result in the N long output.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
+    /// It also uses the provided scratch buffer instead of allocating, which will be faster if it is called more than once.
     /// An error is returned if any of the given slices has the wrong length.
     /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
     /// these non-zero values are ignored and the transform is still performed.
