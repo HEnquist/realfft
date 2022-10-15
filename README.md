@@ -91,7 +91,6 @@ Transform a vector, and then inverse transform the result.
 ```rust
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
-use rustfft::num_traits::Zero;
 
 let length = 256;
 

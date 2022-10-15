@@ -91,7 +91,6 @@
 //! ```
 //! use realfft::RealFftPlanner;
 //! use rustfft::num_complex::Complex;
-//! use rustfft::num_traits::Zero;
 //!
 //! let length = 256;
 //!
@@ -131,7 +130,6 @@
 //! The `realfft` crate requires rustc version 1.37 or newer.
 
 pub use rustfft::num_complex;
-pub use rustfft::num_traits;
 pub use rustfft::FftNum;
 
 use rustfft::num_complex::Complex;
