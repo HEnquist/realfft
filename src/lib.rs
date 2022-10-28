@@ -120,6 +120,7 @@
 //! ```
 //!
 //! ### Versions
+//! - 3.0.2: Fix confusing typos in errors about scratch length.
 //! - 3.0.1: More helpful error messages, fix confusing typos.
 //! - 3.0.0: Improved error reporting.
 //! - 2.0.1: Minor bugfix.
