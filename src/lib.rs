@@ -1,6 +1,6 @@
 //! # RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 //!
-//! This library is a wrapper for RustFFT that enables performing FFT of real-valued data.
+//! This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft) that enables performing FFT of real-valued data.
 //! The API is designed to be as similar as possible to RustFFT.
 //!
 //! Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
@@ -120,6 +120,7 @@
 //! ```
 //!
 //! ### Versions
+//! - 3.1.0: Update to RustFFT 6.1 with Neon support.
 //! - 3.0.2: Fix confusing typos in errors about scratch length.
 //! - 3.0.1: More helpful error messages, fix confusing typos.
 //! - 3.0.0: Improved error reporting.
@@ -130,7 +131,9 @@
 //!
 //! ### Compatibility
 //!
-//! The `realfft` crate requires rustc version 1.37 or newer.
+//! The `realfft` crate has the same rustc version requirements as RustFFT.
+//! The minimum rustc version is 1.37 on all platforms except AArch64.
+//! On AArch64 the minimum rustc version is 1.61.
 
 pub use rustfft::num_complex;
 pub use rustfft::num_traits;
