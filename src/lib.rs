@@ -163,7 +163,7 @@ pub enum FftError {
     OutputBuffer(usize, usize),
     /// The scratch buffer has the wrong size. The transform was not performed.
     ///
-    /// The first member of the tuple is the expected size and the second member is the received
+    /// The first member of the tuple is the minimum size and the second member is the received
     /// size.
     ScratchBuffer(usize, usize),
     /// The input data contained a non-zero imaginary part where there should have been a zero.
@@ -186,8 +186,8 @@ impl FftError {
             }
             Self::ScratchBuffer(expected, got) => {
                 format!(
-                    "Wrong length of scratch, expected {}, got {}",
-                    expected, got
+                    "Scratch buffer of size {} is too small, must be at least {} long",
+                    got, expected
                 )
             }
             Self::InputValues(first, last) => match (first, last) {
@@ -450,7 +450,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
                 output.len(),
             ));
         }
-        if scratch.len() != (self.scratch_len) {
+        if scratch.len() < (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
         let (buffer, fft_scratch) = scratch.split_at_mut(self.length);
@@ -542,7 +542,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
                 output.len(),
             ));
         }
-        if scratch.len() != (self.scratch_len) {
+        if scratch.len() < (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
 
@@ -699,7 +699,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
         if output.len() != self.length {
             return Err(FftError::OutputBuffer(self.length, output.len()));
         }
-        if scratch.len() != (self.scratch_len) {
+        if scratch.len() < (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
 
@@ -815,7 +815,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         if output.len() != self.length {
             return Err(FftError::OutputBuffer(self.length, output.len()));
         }
-        if scratch.len() != (self.scratch_len) {
+        if scratch.len() < (self.scratch_len) {
             return Err(FftError::ScratchBuffer(self.scratch_len, scratch.len()));
         }
         if input.is_empty() {
