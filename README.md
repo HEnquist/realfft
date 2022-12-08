@@ -120,6 +120,7 @@ c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
 
 ### Versions
+- 3.2.0: Allow scratch buffer to be larger than needed.
 - 3.1.0: Update to RustFFT 6.1 with Neon support.
 - 3.0.2: Fix confusing typos in errors about scratch length.
 - 3.0.1: More helpful error messages, fix confusing typos.
