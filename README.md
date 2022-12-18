@@ -5,21 +5,21 @@ The API is designed to be as similar as possible to RustFFT.
 
 Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
 If the length is even, it also enables faster computations by using a complex FFT of half the length.
-It then packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
-The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex vector.
+It then packs a 2N long real signal into an N long complex signal, which is transformed using a standard FFT.
+The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex signal.
 
 The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
 
-The speed increase compared to just converting the input to a 2N long complex vector
+The speed increase compared to just converting the input to a 2N long complex signal
 and using a 2N long FFT depends on the length of the input data.
 The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
 The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.
 
 ### Why use real-to-complex FFT?
 #### Using a complex-to-complex FFT
-A simple way to get the FFT of a real valued vector is to convert it to complex, and use a complex-to-complex FFT.
+A simple way to get the FFT of a real valued signal is to convert it to complex, and use a complex-to-complex FFT.
 
-Let's assume `x` is a 6 element long real vector:
+Let's assume `x` is a 6 element long real signal:
 ```
 x = [x0r, x1r, x2r, x3r, x4r, x5r]
 ```
@@ -87,7 +87,7 @@ The results are printed while running, and are compiled into an html report cont
 To view, open `target/criterion/report/index.html` in a browser.
 
 ### Example
-Transform a vector, and then inverse transform the result.
+Transform a signal, and then inverse transform the result.
 ```rust
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
@@ -100,7 +100,7 @@ let mut real_planner = RealFftPlanner::<f64>::new();
 
 // create a FFT
 let r2c = real_planner.plan_fft_forward(length);
-// make input and output vectors
+// make input and output signals
 let mut indata = r2c.make_input_vec();
 let mut spectrum = r2c.make_output_vec();
 
@@ -111,7 +111,7 @@ assert_eq!(spectrum.len(), length/2+1);
 // Forward transform the input data
 r2c.process(&mut indata, &mut spectrum).unwrap();
 
-// create an iFFT and an output vector
+// create an iFFT and an output signal
 let c2r = real_planner.plan_fft_inverse(length);
 let mut outdata = c2r.make_output_vec();
 assert_eq!(outdata.len(), length);
