@@ -19,6 +19,10 @@ rustfft = "6.1.0"
 criterion = "0.3"
 rand = "0.8.3"
 
+[features]
+# Enable aarch64 neon SIMD acceleration
+neon = ["rustfft/neon"]
+
 [[bench]]
 name = "realfft"
 harness = false
