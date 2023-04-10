@@ -261,7 +261,7 @@ pub trait RealToComplex<T>: Sync + Send {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()>;
+    fn process(&self, input: &[T], output: &mut [Complex<T>]) -> Res<()>;
 
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
@@ -269,7 +269,7 @@ pub trait RealToComplex<T>: Sync + Send {
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
-        input: &mut [T],
+        input: &[T],
         output: &mut [Complex<T>],
         scratch: &mut [Complex<T>],
     ) -> Res<()>;
@@ -426,7 +426,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
+    fn process(&self, input: &[T], output: &mut [Complex<T>]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
@@ -437,7 +437,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
-        input: &mut [T],
+        input: &[T],
         output: &mut [Complex<T>],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
@@ -518,7 +518,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
     /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
+    fn process(&self, input: &[T], output: &mut [Complex<T>]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
@@ -529,7 +529,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
     /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
-        input: &mut [T],
+        input: &[T],
         output: &mut [Complex<T>],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
@@ -549,7 +549,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
 
         let fftlen = self.length / 2;
         let buf_in = unsafe {
-            let ptr = input.as_mut_ptr() as *mut Complex<T>;
+            let ptr = input.as_ptr() as *mut Complex<T>;
             let len = input.len();
             std::slice::from_raw_parts_mut(ptr, len / 2)
         };
