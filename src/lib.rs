@@ -1,30 +1,38 @@
 //! # RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 //!
-//! This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft) that enables performing FFT of real-valued data.
+//! This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft)
+//! that enables performing FFT of real-valued data.
 //! The API is designed to be as similar as possible to RustFFT.
 //!
-//! Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
+//! Using this library instead of RustFFT directly avoids the need of converting
+//! real-valued data to complex before performing a FFT.
 //! If the length is even, it also enables faster computations by using a complex FFT of half the length.
-//! It then packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
-//! The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex vector.
+//! It then packs a N long real vector into an N/2 long complex vector,
+//! which is transformed using a standard FFT.
+//! The FFT result is then post-processed to give only the first half of the complex spectrum,
+//! as an N/2+1 long complex vector.
 //!
-//! The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
+//! The iFFT goes through the same steps backwards,
+//! to transform an N/2+1 long complex spectrum to an N long real result.
 //!
-//! The speed increase compared to just converting the input to a 2N long complex vector
-//! and using a 2N long FFT depends on the length of the input data.
-//! The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
+//! The speed increase compared to just converting the input to an N long complex vector
+//! and using an N long complex-to-complex FFT depends on the length of the input data.
+//! The largest improvements are for long FFTs and for lengths over around 1000 elements
+//! there is an improvement of about a factor 2.
 //! The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.  
 //!
 //! ## Why use real-to-complex FFT?
 //! ### Using a complex-to-complex FFT
-//! A simple way to get the FFT of a real valued vector is to convert it to complex, and using a complex-to-complex FFT.
+//! A simple way to get the FFT of a real valued vector is to convert it to complex,
+//! and using a complex-to-complex FFT.
 //!
 //! Let's assume `x` is a 6 element long real vector:
 //! ```text
 //! x = [x0r, x1r, x2r, x3r, x4r, x5r]
 //! ```
 //!
-//! We now convert `x` to complex by adding an imaginary part with value zero. Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
+//! We now convert `x` to complex by adding an imaginary part with value zero.
+//! Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
 //! ```text
 //! x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0), (x5r, 0)]
 //! ```
@@ -49,7 +57,8 @@
 //! FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
 //! ```
 //!
-//! The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of independent values as we started with.
+//! The result is similar, but this time there is no zero at `X3i`.
+//! Also in this case we got the same number of independent values as we started with.
 //!
 //! ### Real-to-complex
 //! Using a real-to-complex FFT removes the need for converting the input data to complex.
@@ -65,10 +74,15 @@
 //! RealFFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i)]
 //! ```
 //!
-//! This is the data layout output by the real-to-complex FFT, and the one expected as input to the complex-to-real iFFT.
+//! This is the data layout output by the real-to-complex FFT,
+//! and the one expected as input to the complex-to-real iFFT.
 //!
 //! ## Scaling
-//! RealFFT matches the behaviour of RustFFT and does not normalize the output of either FFT of iFFT. To get normalized results, each element must be scaled by `1/sqrt(length)`. If the processing involves both an FFT and an iFFT step, it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
+//! RealFFT matches the behaviour of RustFFT and does not normalize the output of either FFT of iFFT.
+//! To get normalized results, each element must be scaled by `1/sqrt(length)`,
+//! where `length` is the length of the real-valued vector.
+//! If the processing involves both an FFT and an iFFT step,
+//! it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
 //!
 //! ## Documentation
 //!
@@ -120,6 +134,8 @@
 //! ```
 //!
 //! ### Versions
+//! - 3.3.0: Add method for getting the length of the complex input/output.
+//!          Bugfix: clean up numerical noise in the zero imaginary components.
 //! - 3.2.0: Allow scratch buffer to be larger than needed.
 //! - 3.1.0: Update to RustFFT 6.1 with Neon support.
 //! - 3.0.2: Fix confusing typos in errors about scratch length.
@@ -253,8 +269,8 @@ pub struct ComplexToRealEven<T> {
     scratch_len: usize,
 }
 
-/// An FFT that takes a real-valued input vector of length 2*N and transforms it to a complex
-/// spectrum of length N+1.
+/// An FFT that takes a real-valued input vector of length N and transforms it to a complex
+/// spectrum of length N/2+1.
 #[allow(clippy::len_without_is_empty)]
 pub trait RealToComplex<T>: Sync + Send {
     /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
@@ -277,8 +293,14 @@ pub trait RealToComplex<T>: Sync + Send {
     /// Get the minimum length of the scratch space needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
 
-    /// Get the number of points that this FFT can process.
+    /// The FFT length.
+    /// Get the number of real data points that this FFT takes as input.
     fn len(&self) -> usize;
+
+    /// Get the number of complex data points that this FFT returns.
+    fn complex_len(&self) -> usize {
+        self.len() / 2 + 1
+    }
 
     /// Convenience method to make an input vector of the right type and length.
     fn make_input_vec(&self) -> Vec<T>;
@@ -290,8 +312,8 @@ pub trait RealToComplex<T>: Sync + Send {
     fn make_scratch_vec(&self) -> Vec<Complex<T>>;
 }
 
-/// An FFT that takes a complex-valued input vector of length N+1 and transforms it to a complex
-/// spectrum of length 2*N.
+/// An FFT that takes a complex-valued input vector of length N/2+1 and transforms it to a real
+/// vector of length N.
 #[allow(clippy::len_without_is_empty)]
 pub trait ComplexToReal<T>: Sync + Send {
     /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
@@ -320,8 +342,14 @@ pub trait ComplexToReal<T>: Sync + Send {
     /// Get the minimum length of the scratch space needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
 
-    /// Get the number of points that this FFT can process.
+    /// The FFT length.
+    /// Get the number of real data points that this FFT returns.
     fn len(&self) -> usize;
+
+    /// Get the number of complex data points that this FFT accepts as input.
+    fn complex_len(&self) -> usize {
+        self.len() / 2 + 1
+    }
 
     /// Convenience method to make an input vector of the right type and length.
     fn make_input_vec(&self) -> Vec<Complex<T>>;
@@ -444,7 +472,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         if input.len() != self.length {
             return Err(FftError::InputBuffer(self.length, input.len()));
         }
-        let expected_output_buffer_size = self.length / 2 + 1;
+        let expected_output_buffer_size = self.complex_len();
         if output.len() != expected_output_buffer_size {
             return Err(FftError::OutputBuffer(
                 expected_output_buffer_size,
@@ -461,7 +489,10 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
         }
         // FFT and store result in buffer_out
         self.fft.process_with_scratch(buffer, fft_scratch);
-        output.copy_from_slice(&buffer[0..self.length / 2 + 1]);
+        output.copy_from_slice(&buffer[0..self.complex_len()]);
+        if let Some(elem) = output.first_mut() {
+            elem.im = T::zero();
+        }
         Ok(())
     }
 
@@ -478,7 +509,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
     }
 
     fn make_output_vec(&self) -> Vec<Complex<T>> {
-        vec![Complex::zero(); self.len() / 2 + 1]
+        vec![Complex::zero(); self.complex_len()]
     }
 
     fn make_scratch_vec(&self) -> Vec<Complex<T>> {
@@ -487,7 +518,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
 }
 
 impl<T: FftNum> RealToComplexEven<T> {
-    /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
+    /// Create a new RealToComplex FFT for real-valued input data of a given length, and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 > 0 {
@@ -536,7 +567,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
         if input.len() != self.length {
             return Err(FftError::InputBuffer(self.length, input.len()));
         }
-        let expected_output_buffer_size = self.length / 2 + 1;
+        let expected_output_buffer_size = self.complex_len();
         if output.len() != expected_output_buffer_size {
             return Err(FftError::OutputBuffer(
                 expected_output_buffer_size,
@@ -638,7 +669,7 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
     }
 
     fn make_output_vec(&self) -> Vec<Complex<T>> {
-        vec![Complex::zero(); self.len() / 2 + 1]
+        vec![Complex::zero(); self.complex_len()]
     }
 
     fn make_scratch_vec(&self) -> Vec<Complex<T>> {
@@ -647,7 +678,8 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
 }
 
 impl<T: FftNum> ComplexToRealOdd<T> {
-    /// Create a new ComplexToReal FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
+    /// Create a new ComplexToRealOdd inverse FFT for complex input. The `length` parameter refers to the length of the real-valued output.
+    /// Uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 == 0 {
@@ -690,7 +722,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
         output: &mut [T],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        let expected_input_buffer_size = self.length / 2 + 1;
+        let expected_input_buffer_size = self.complex_len();
         if input.len() != expected_input_buffer_size {
             return Err(FftError::InputBuffer(
                 expected_input_buffer_size,
@@ -721,7 +753,6 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
             .zip(input.iter().skip(1))
         {
             *buf = val.conj();
-            //buf.im = -val.im;
         }
         self.fft.process_with_scratch(buffer, fft_scratch);
         for (val, out) in buffer.iter().zip(output.iter_mut()) {
@@ -742,7 +773,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
     }
 
     fn make_input_vec(&self) -> Vec<Complex<T>> {
-        vec![Complex::zero(); self.len() / 2 + 1]
+        vec![Complex::zero(); self.complex_len()]
     }
 
     fn make_output_vec(&self) -> Vec<T> {
@@ -755,7 +786,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
 }
 
 impl<T: FftNum> ComplexToRealEven<T> {
-    /// Create a new ComplexToReal FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
+    /// Create a new ComplexToRealEven inverse FFT for complex input. The `length` parameter refers to the length of the real-valued output.
+    /// Uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 > 0 {
@@ -806,7 +838,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
         output: &mut [T],
         scratch: &mut [Complex<T>],
     ) -> Res<()> {
-        let expected_input_buffer_size = self.length / 2 + 1;
+        let expected_input_buffer_size = self.complex_len();
         if input.len() != expected_input_buffer_size {
             return Err(FftError::InputBuffer(
                 expected_input_buffer_size,
@@ -918,7 +950,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
     }
 
     fn make_input_vec(&self) -> Vec<Complex<T>> {
-        vec![Complex::zero(); self.len() / 2 + 1]
+        vec![Complex::zero(); self.complex_len()]
     }
 
     fn make_output_vec(&self) -> Vec<T> {
@@ -936,37 +968,42 @@ mod tests {
     use crate::RealFftPlanner;
     use rand::Rng;
     use rustfft::num_complex::Complex;
-    use rustfft::num_traits::Zero;
+    use rustfft::num_traits::{Float, Zero};
     use rustfft::FftPlanner;
     use std::error::Error;
+    use std::ops::Sub;
 
     // get the largest difference
-    fn compare_complex(a: &[Complex<f64>], b: &[Complex<f64>]) -> f64 {
-        a.iter().zip(b.iter()).fold(0.0, |maxdiff, (val_a, val_b)| {
-            let diff = (val_a - val_b).norm();
-            if maxdiff > diff {
-                maxdiff
-            } else {
-                diff
-            }
-        })
+    fn compare_complex<T: Float + Sub>(a: &[Complex<T>], b: &[Complex<T>]) -> T {
+        a.iter()
+            .zip(b.iter())
+            .fold(T::zero(), |maxdiff, (val_a, val_b)| {
+                let diff = (val_a - val_b).norm();
+                if maxdiff > diff {
+                    maxdiff
+                } else {
+                    diff
+                }
+            })
     }
 
     // get the largest difference
-    fn compare_f64(a: &[f64], b: &[f64]) -> f64 {
-        a.iter().zip(b.iter()).fold(0.0, |maxdiff, (val_a, val_b)| {
-            let diff = (val_a - val_b).abs();
-            if maxdiff > diff {
-                maxdiff
-            } else {
-                diff
-            }
-        })
+    fn compare_scalars<T: Float + Sub>(a: &[T], b: &[T]) -> T {
+        a.iter()
+            .zip(b.iter())
+            .fold(T::zero(), |maxdiff, (val_a, val_b)| {
+                let diff = (*val_a - *val_b).abs();
+                if maxdiff > diff {
+                    maxdiff
+                } else {
+                    diff
+                }
+            })
     }
 
     // Compare ComplexToReal with standard iFFT
     #[test]
-    fn complex_to_real() {
+    fn complex_to_real_64() {
         for length in 1..1000 {
             let mut real_planner = RealFftPlanner::<f64>::new();
             let c2r = real_planner.plan_fft_inverse(length);
@@ -983,7 +1020,7 @@ mod tests {
             }
             for (val_long, val) in rustfft_check
                 .iter_mut()
-                .take(length / 2 + 1)
+                .take(c2r.complex_len())
                 .zip(indata.iter())
             {
                 *val_long = *val;
@@ -1003,9 +1040,58 @@ mod tests {
             fft.process(&mut rustfft_check);
 
             let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f64>>();
-            let maxdiff = compare_f64(&out_a, &check_real);
+            let maxdiff = compare_scalars(&out_a, &check_real);
             assert!(
                 maxdiff < 1.0e-9,
+                "Length: {}, too large error: {}",
+                length,
+                maxdiff
+            );
+        }
+    }
+
+    // Compare ComplexToReal with standard iFFT
+    #[test]
+    fn complex_to_real_32() {
+        for length in 1..1000 {
+            let mut real_planner = RealFftPlanner::<f32>::new();
+            let c2r = real_planner.plan_fft_inverse(length);
+            let mut out_a = c2r.make_output_vec();
+            let mut indata = c2r.make_input_vec();
+            let mut rustfft_check: Vec<Complex<f32>> = vec![Complex::zero(); length];
+            let mut rng = rand::thread_rng();
+            for val in indata.iter_mut() {
+                *val = Complex::new(rng.gen::<f32>(), rng.gen::<f32>());
+            }
+            indata[0].im = 0.0;
+            if length % 2 == 0 {
+                indata[length / 2].im = 0.0;
+            }
+            for (val_long, val) in rustfft_check
+                .iter_mut()
+                .take(c2r.complex_len())
+                .zip(indata.iter())
+            {
+                *val_long = *val;
+            }
+            for (val_long, val) in rustfft_check
+                .iter_mut()
+                .rev()
+                .take(length / 2)
+                .zip(indata.iter().skip(1))
+            {
+                *val_long = val.conj();
+            }
+            let mut fft_planner = FftPlanner::<f32>::new();
+            let fft = fft_planner.plan_fft_inverse(length);
+
+            c2r.process(&mut indata, &mut out_a).unwrap();
+            fft.process(&mut rustfft_check);
+
+            let check_real = rustfft_check.iter().map(|val| val.re).collect::<Vec<f32>>();
+            let maxdiff = compare_scalars(&out_a, &check_real);
+            assert!(
+                maxdiff < 5.0e-4,
                 "Length: {}, too large error: {}",
                 length,
                 maxdiff
@@ -1080,7 +1166,7 @@ mod tests {
 
     // Compare RealToComplex with standard FFT
     #[test]
-    fn real_to_complex() {
+    fn real_to_complex_64() {
         for length in 1..1000 {
             let mut real_planner = RealFftPlanner::<f64>::new();
             let r2c = real_planner.plan_fft_forward(length);
@@ -1096,12 +1182,57 @@ mod tests {
                 .collect::<Vec<Complex<f64>>>();
             let mut fft_planner = FftPlanner::<f64>::new();
             let fft = fft_planner.plan_fft_forward(length);
-
             fft.process(&mut rustfft_check);
             r2c.process(&mut indata, &mut out_a).unwrap();
-            let maxdiff = compare_complex(&out_a, &rustfft_check[0..(length / 2 + 1)]);
+            assert_eq!(out_a[0].im, 0.0, "First imaginary component must be zero");
+            if length % 2 == 0 {
+                assert_eq!(
+                    out_a.last().unwrap().im,
+                    0.0,
+                    "Last imaginary component for even lengths must be zero"
+                );
+            }
+            let maxdiff = compare_complex(&out_a, &rustfft_check[0..r2c.complex_len()]);
             assert!(
                 maxdiff < 1.0e-9,
+                "Length: {}, too large error: {}",
+                length,
+                maxdiff
+            );
+        }
+    }
+
+    // Compare RealToComplex with standard FFT
+    #[test]
+    fn real_to_complex_32() {
+        for length in 1..1000 {
+            let mut real_planner = RealFftPlanner::<f32>::new();
+            let r2c = real_planner.plan_fft_forward(length);
+            let mut out_a = r2c.make_output_vec();
+            let mut indata = r2c.make_input_vec();
+            let mut rng = rand::thread_rng();
+            for val in indata.iter_mut() {
+                *val = rng.gen::<f32>();
+            }
+            let mut rustfft_check = indata
+                .iter()
+                .map(Complex::from)
+                .collect::<Vec<Complex<f32>>>();
+            let mut fft_planner = FftPlanner::<f32>::new();
+            let fft = fft_planner.plan_fft_forward(length);
+            fft.process(&mut rustfft_check);
+            r2c.process(&mut indata, &mut out_a).unwrap();
+            assert_eq!(out_a[0].im, 0.0, "First imaginary component must be zero");
+            if length % 2 == 0 {
+                assert_eq!(
+                    out_a.last().unwrap().im,
+                    0.0,
+                    "Last imaginary component for even lengths must be zero"
+                );
+            }
+            let maxdiff = compare_complex(&out_a, &rustfft_check[0..r2c.complex_len()]);
+            assert!(
+                maxdiff < 5.0e-4,
                 "Length: {}, too large error: {}",
                 length,
                 maxdiff
