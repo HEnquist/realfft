@@ -1,4 +1,4 @@
-//! # RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
+//! # RealFFT: Real-to-complex forward FFT and complex-to-real inverse FFT based on RustFFT
 //!
 //! This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft)
 //! that enables fast and convenient FFT of real-valued data.
@@ -82,7 +82,7 @@
 //! RealFFT matches the behaviour of RustFFT and does not normalize the output of either forward or inverse FFT.
 //! To get normalized results, each element must be scaled by `1/sqrt(length)`,
 //! where `length` is the length of the real-valued signal.
-//! If the processing involves both an FFT and an iFFT step,
+//! If the processing involves both a forward and an inverse FFT step,
 //! it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
 //!
 //! ## Documentation
@@ -972,7 +972,7 @@ mod tests {
             })
     }
 
-    // Compare ComplexToReal with standard iFFT
+    // Compare ComplexToReal with standard inverse FFT
     #[test]
     fn complex_to_real_64() {
         for length in 1..1000 {
@@ -1021,7 +1021,7 @@ mod tests {
         }
     }
 
-    // Compare ComplexToReal with standard iFFT
+    // Compare ComplexToReal with standard inverse FFT
     #[test]
     fn complex_to_real_32() {
         for length in 1..1000 {

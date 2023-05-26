@@ -1,6 +1,6 @@
 # realfft
 
-## RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
+## RealFFT: Real-to-complex forward FFT and complex-to-real inverse FFT based on RustFFT
 
 This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft)
 that enables fast and convenient FFT of real-valued data.
