@@ -1,9 +1,9 @@
 [package]
 name = "realfft"
-version = "3.2.0"
+version = "3.3.0"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 edition = "2018"
-description = "Real-to-complex FFT and complex-to-real iFFT for Rust"
+description = "Real-to-complex forward FFT and complex-to-real inverse FFT for Rust"
 license = "MIT"
 repository = "https://github.com/HEnquist/realfft"
 keywords = ["fft", "dft", "discrete", "fourier", "transform"]
