@@ -1,30 +1,31 @@
 //! # RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
 //!
 //! This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft)
-//! that enables performing FFT of real-valued data.
+//! that enables fast and convenient FFT of real-valued data.
 //! The API is designed to be as similar as possible to RustFFT.
 //!
 //! Using this library instead of RustFFT directly avoids the need of converting
 //! real-valued data to complex before performing a FFT.
 //! If the length is even, it also enables faster computations by using a complex FFT of half the length.
-//! It then packs a N long real vector into an N/2 long complex vector,
-//! which is transformed using a standard FFT.
+//! It then packs a real-valued signal of length N into an N/2 long complex buffer,
+//! which is transformed using a standard complex-to-complex FFT.
 //! The FFT result is then post-processed to give only the first half of the complex spectrum,
 //! as an N/2+1 long complex vector.
 //!
-//! The iFFT goes through the same steps backwards,
-//! to transform an N/2+1 long complex spectrum to an N long real result.
+//! The inverse FFT goes through the same steps backwards,
+//! to transform a complex spectrum of length N/2+1 to a real-valued signal of length N.
 //!
-//! The speed increase compared to just converting the input to an N long complex vector
-//! and using an N long complex-to-complex FFT depends on the length of the input data.
-//! The largest improvements are for long FFTs and for lengths over around 1000 elements
+//! The speed increase compared to just converting the input to a length N complex vector
+//! and using a length N complex-to-complex FFT depends on the length of the input data.
+//! The largest improvements are for longer FFTs and for lengths over around 1000 elements
 //! there is an improvement of about a factor 2.
-//! The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.  
+//! The difference shrinks for shorter lengths,
+//! and around 30 elements there is no longer any difference.
 //!
 //! ## Why use real-to-complex FFT?
 //! ### Using a complex-to-complex FFT
-//! A simple way to get the FFT of a real valued vector is to convert it to complex,
-//! and using a complex-to-complex FFT.
+//! A simple way to transform a real valued signal is to convert it to complex,
+//! and then use a complex-to-complex FFT.
 //!
 //! Let's assume `x` is a 6 element long real vector:
 //! ```text
@@ -75,12 +76,12 @@
 //! ```
 //!
 //! This is the data layout output by the real-to-complex FFT,
-//! and the one expected as input to the complex-to-real iFFT.
+//! and the one expected as input to the complex-to-real inverse FFT.
 //!
 //! ## Scaling
-//! RealFFT matches the behaviour of RustFFT and does not normalize the output of either FFT of iFFT.
+//! RealFFT matches the behaviour of RustFFT and does not normalize the output of either forward or inverse FFT.
 //! To get normalized results, each element must be scaled by `1/sqrt(length)`,
-//! where `length` is the length of the real-valued vector.
+//! where `length` is the length of the real-valued signal.
 //! If the processing involves both an FFT and an iFFT step,
 //! it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
 //!
@@ -101,7 +102,7 @@
 //! To view, open `target/criterion/report/index.html` in a browser.
 //!
 //! ## Example
-//! Transform a vector, and then inverse transform the result.
+//! Transform a signal, and then inverse transform the result.
 //! ```
 //! use realfft::RealFftPlanner;
 //! use rustfft::num_complex::Complex;
@@ -114,22 +115,26 @@
 //!
 //! // create a FFT
 //! let r2c = real_planner.plan_fft_forward(length);
-//! // make input and output vectors
+//! // make a dummy real-valued signal (filled with zeros)
 //! let mut indata = r2c.make_input_vec();
+//! // make a vector for storing the spectrum
 //! let mut spectrum = r2c.make_output_vec();
 //!
 //! // Are they the length we expect?
 //! assert_eq!(indata.len(), length);
 //! assert_eq!(spectrum.len(), length/2+1);
 //!
-//! // Forward transform the input data
+//! // forward transform the signal
 //! r2c.process(&mut indata, &mut spectrum).unwrap();
 //!
-//! // create an iFFT and an output vector
+//! // create an inverse FFT
 //! let c2r = real_planner.plan_fft_inverse(length);
+//!
+//! // create a vector for storing the output
 //! let mut outdata = c2r.make_output_vec();
 //! assert_eq!(outdata.len(), length);
 //!
+//! // inverse transform the spectrum back to a real-valued signal
 //! c2r.process(&mut spectrum, &mut outdata).unwrap();
 //! ```
 //!
@@ -269,20 +274,24 @@ pub struct ComplexToRealEven<T> {
     scratch_len: usize,
 }
 
-/// An FFT that takes a real-valued input vector of length N and transforms it to a complex
-/// spectrum of length N/2+1.
+/// A forward FFT that takes a real-valued input signal of length N
+/// and transforms it to a complex spectrum of length N/2+1.
 #[allow(clippy::len_without_is_empty)]
 pub trait RealToComplex<T>: Sync + Send {
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
+    /// Transform a signal of N real-valued samples,
+    /// storing the resulting complex spectrum in the N/2+1
+    /// (with N/2 rounded down) element long output slice.
+    /// The input buffer is used as scratch space,
+    /// so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()>;
 
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    /// An error is returned if any of the given slices has the wrong length.
+    /// Transform a signal of N real-valued samples,
+    /// similar to [`process()`](RealToComplex::process).
+    /// The difference is that this method uses the provided
+    /// scratch buffer instead of allocating new scratch space.
+    /// This is faster if the same scratch buffer is used for multiple calls.
     fn process_with_scratch(
         &self,
         input: &mut [T],
@@ -290,11 +299,11 @@ pub trait RealToComplex<T>: Sync + Send {
         scratch: &mut [Complex<T>],
     ) -> Res<()>;
 
-    /// Get the minimum length of the scratch space needed for `process_with_scratch`.
+    /// Get the minimum length of the scratch buffer needed for `process_with_scratch`.
     fn get_scratch_len(&self) -> usize;
 
     /// The FFT length.
-    /// Get the number of real data points that this FFT takes as input.
+    /// Get the length of the real signal that this FFT takes as input.
     fn len(&self) -> usize;
 
     /// Get the number of complex data points that this FFT returns.
@@ -312,26 +321,28 @@ pub trait RealToComplex<T>: Sync + Send {
     fn make_scratch_vec(&self) -> Vec<Complex<T>>;
 }
 
-/// An FFT that takes a complex-valued input vector of length N/2+1 and transforms it to a real
-/// vector of length N.
+/// An inverse FFT that takes a complex spectrum of length N/2+1
+/// and transforms it to a real-valued signal of length N.
 #[allow(clippy::len_without_is_empty)]
 pub trait ComplexToReal<T>: Sync + Send {
-    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
+    /// Inverse transform a complex spectrum corresponding to a real-valued signal of length N.
+    /// The input is a slice of complex values with length N/2+1 (with N/2 rounded down).
+    /// The resulting real-valued signal is stored in the output slice of length N.
+    /// The input buffer is used as scratch space,
+    /// so the contents of input should be considered garbage after calling.
     /// It also allocates additional scratch space as needed.
     /// An error is returned if any of the given slices has the wrong length.
-    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValues` error to tell that the
+    /// If the input data is invalid, meaning that one of the positions that should
+    /// contain a zero holds a non-zero value, the transform is still performed.
+    /// The function then returns an `FftError::InputValues` error to tell that the
     /// result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()>;
 
-    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the 2*N long output.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    /// An error is returned if any of the given slices has the wrong length.
-    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// the transform is still performed. The function then returns an `FftError::InputValues` error to tell that the
-    /// result may not be correct.
+    /// Inverse transform a complex spectrum,
+    /// similar to [`process()`](ComplexToReal::process).
+    /// The difference is that this method uses the provided
+    /// scratch buffer instead of allocating new scratch space.
+    /// This is faster if the same scratch buffer is used for multiple calls.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -343,10 +354,10 @@ pub trait ComplexToReal<T>: Sync + Send {
     fn get_scratch_len(&self) -> usize;
 
     /// The FFT length.
-    /// Get the number of real data points that this FFT returns.
+    /// Get the length of the real-valued signal that this FFT returns.
     fn len(&self) -> usize;
 
-    /// Get the number of complex data points that this FFT accepts as input.
+    /// Get the length of the slice slice of complex values that this FFT accepts as input.
     fn complex_len(&self) -> usize {
         self.len() / 2 + 1
     }
@@ -372,7 +383,8 @@ where
         .map(|(x, (y, z))| (x, y, z))
 }
 
-/// A planner is used to create FFTs. It caches results internally,
+/// A planner is used to create FFTs.
+/// It caches results internally,
 /// so when making more than one FFT it is advisable to reuse the same planner.
 pub struct RealFftPlanner<T: FftNum> {
     planner: FftPlanner<T>,
@@ -391,8 +403,9 @@ impl<T: FftNum> RealFftPlanner<T> {
         }
     }
 
-    /// Plan a Real-to-Complex forward FFT. Returns the FFT in a shared reference.
-    /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
+    /// Plan a real-to-complex forward FFT. Returns the FFT in a shared reference.
+    /// If requesting a second forward FFT of the same length,
+    /// the planner will return a new reference to the already existing one.
     pub fn plan_fft_forward(&mut self, len: usize) -> Arc<dyn RealToComplex<T>> {
         if let Some(fft) = self.r2c_cache.get(&len) {
             Arc::clone(fft)
@@ -408,8 +421,9 @@ impl<T: FftNum> RealFftPlanner<T> {
         }
     }
 
-    /// Plan a Complex-to-Real inverse FFT. Returns the FFT in a shared reference.
-    /// If requesting a second FFT of the same length, this will return a new reference to the already existing one.
+    /// Plan a complex-to-real inverse FFT. Returns the FFT in a shared reference.
+    /// If requesting a second inverse FFT of the same length,
+    /// the planner will return a new reference to the already existing one.
     pub fn plan_fft_inverse(&mut self, len: usize) -> Arc<dyn ComplexToReal<T>> {
         if let Some(fft) = self.c2r_cache.get(&len) {
             Arc::clone(fft)
@@ -433,7 +447,8 @@ impl<T: FftNum> Default for RealFftPlanner<T> {
 }
 
 impl<T: FftNum> RealToComplexOdd<T> {
-    /// Create a new RealToComplex FFT for input data of a given length, and uses the given FftPlanner to build the inner FFT.
+    /// Create a new RealToComplex forward FFT for real-valued input data of a given length,
+    /// and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 == 0 {
@@ -450,19 +465,11 @@ impl<T: FftNum> RealToComplexOdd<T> {
 }
 
 impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.
-    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 (with N/2 rounded down) element long complex output vector.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [T],
@@ -518,7 +525,8 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexOdd<T> {
 }
 
 impl<T: FftNum> RealToComplexEven<T> {
-    /// Create a new RealToComplex FFT for real-valued input data of a given length, and uses the given FftPlanner to build the inner FFT.
+    /// Create a new RealToComplex forward FFT for real-valued input data of a given length,
+    /// and uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 > 0 {
@@ -532,7 +540,6 @@ impl<T: FftNum> RealToComplexEven<T> {
         let twiddles: Vec<Complex<T>> = (1..twiddle_count)
             .map(|i| compute_twiddle(i, length) * T::from_f64(0.5).unwrap())
             .collect();
-        //let mut fft_planner = FftPlanner::<T>::new();
         let fft = fft_planner.plan_fft_forward(length / 2);
         let scratch_len = fft.get_outofplace_scratch_len();
         RealToComplexEven {
@@ -545,19 +552,11 @@ impl<T: FftNum> RealToComplexEven<T> {
 }
 
 impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.
-    /// An error is returned if any of the given slices has the wrong length.
     fn process(&self, input: &mut [T], output: &mut [Complex<T>]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a vector of N real-valued samples, storing the result in the N/2+1 element long complex output vector.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    /// An error is returned if any of the given slices has the wrong length.
     fn process_with_scratch(
         &self,
         input: &mut [T],
@@ -678,14 +677,14 @@ impl<T: FftNum> RealToComplex<T> for RealToComplexEven<T> {
 }
 
 impl<T: FftNum> ComplexToRealOdd<T> {
-    /// Create a new ComplexToRealOdd inverse FFT for complex input. The `length` parameter refers to the length of the real-valued output.
+    /// Create a new ComplexToRealOdd inverse FFT for complex input spectra.
+    /// The `length` parameter refers to the length of the resulting real-valued signal.
     /// Uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not odd.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
         if length % 2 == 0 {
             panic!("Length must be odd, got {}", length,);
         }
-        //let mut fft_planner = FftPlanner::<T>::new();
         let fft = fft_planner.plan_fft_inverse(length);
         let scratch_len = length + fft.get_inplace_scratch_len();
         ComplexToRealOdd {
@@ -697,25 +696,11 @@ impl<T: FftNum> ComplexToRealOdd<T> {
 }
 
 impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
-    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.
-    /// An error is returned if any of the given slices has the wrong length.
-    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// these non-zero values are ignored and the transform is still performed.
-    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a complex spectrum of N/2+1 (with N/2 rounded down) values and store the real result in the N long output.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    /// An error is returned if any of the given slices has the wrong length.
-    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// these non-zero values are ignored and the transform is still performed.
-    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
@@ -786,7 +771,8 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealOdd<T> {
 }
 
 impl<T: FftNum> ComplexToRealEven<T> {
-    /// Create a new ComplexToRealEven inverse FFT for complex input. The `length` parameter refers to the length of the real-valued output.
+    /// Create a new ComplexToRealEven inverse FFT for complex input spectra.
+    /// The `length` parameter refers to the length of the resulting real-valued signal.
     /// Uses the given FftPlanner to build the inner FFT.
     /// Panics if the length is not even.
     pub fn new(length: usize, fft_planner: &mut FftPlanner<T>) -> Self {
@@ -801,7 +787,6 @@ impl<T: FftNum> ComplexToRealEven<T> {
         let twiddles: Vec<Complex<T>> = (1..twiddle_count)
             .map(|i| compute_twiddle(i, length).conj())
             .collect();
-        //let mut fft_planner = FftPlanner::<T>::new();
         let fft = fft_planner.plan_fft_inverse(length / 2);
         let scratch_len = fft.get_outofplace_scratch_len();
         ComplexToRealEven {
@@ -813,25 +798,11 @@ impl<T: FftNum> ComplexToRealEven<T> {
     }
 }
 impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
-    /// Transform a complex spectrum of N/2+1 values and store the real result in the N long output.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also allocates additional scratch space as needed.
-    /// An error is returned if any of the given slices has the wrong length.
-    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// these non-zero values are ignored and the transform is still performed.
-    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process(&self, input: &mut [Complex<T>], output: &mut [T]) -> Res<()> {
         let mut scratch = self.make_scratch_vec();
         self.process_with_scratch(input, output, &mut scratch)
     }
 
-    /// Transform a complex spectrum of N/2+1 values and store the real result in the N long output.
-    /// The input buffer is used as scratch space, so the contents of input should be considered garbage after calling.
-    /// It also uses the provided scratch vector instead of allocating, which will be faster if it is called more than once.
-    /// An error is returned if any of the given slices has the wrong length.
-    /// If the input data is invalid, meaning that one of the positions that should contain a zero holds a different value,
-    /// these non-zero values are ignored and the transform is still performed.
-    /// The function then returns an `FftError::InputValues` error to tell that the result may not be correct.
     fn process_with_scratch(
         &self,
         input: &mut [Complex<T>],
