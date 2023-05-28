@@ -28,21 +28,20 @@ jobs:
       - name: Run cargo test
         run: cargo test
 
-  # Disabled since criterion doesn't build with 1.37
-  #check_msrv:
-  #  name: Check minimum rust version
-  #  runs-on: ubuntu-latest
-  #  steps:
-  #    - name: Checkout sources
-  #      uses: actions/checkout@v3
+  check_msrv:
+    name: Check minimum rust version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
 
-  #    - name: Install toolchain
-  #      uses: dtolnay/rust-toolchain@1.37
-  #      with:
-  #        components: rustfmt, clippy
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@1.37
+        with:
+          components: rustfmt, clippy
 
-  #    - name: Run cargo check
-  #      run: cargo check
+      - name: Run cargo check
+        run: cargo check
 
   fmt:
     name: Lints
