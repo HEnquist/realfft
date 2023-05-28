@@ -28,27 +28,24 @@ jobs:
       - name: Run cargo test
         run: cargo test
 
-  check_msrv:
-    name: Check minimum rust version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
+  # Disabled since criterion doesn't build with 1.37
+  #check_msrv:
+  #  name: Check minimum rust version
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - name: Checkout sources
+  #      uses: actions/checkout@v3
 
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@1.37
-        with:
-          components: rustfmt, clippy
+  #    - name: Install toolchain
+  #      uses: dtolnay/rust-toolchain@1.37
+  #      with:
+  #        components: rustfmt, clippy
 
-      # This is needed since recent criterion versions don't build on 1.37
-      - name: Install cargo-hack
-        uses: taiki-e/install-action@cargo-hack
-
-      - name: Run cargo check
-        run: cargo hack check --no-dev-deps
+  #    - name: Run cargo check
+  #      run: cargo check
 
   fmt:
-    name: Rustfmt
+    name: Lints
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -61,3 +58,6 @@ jobs:
       
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
+
+      - name: Run cargo clippy
+        run: cargo clippy -- -D warnings
