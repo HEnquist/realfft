@@ -1,30 +1,41 @@
-# RealFFT: Real-to-complex FFT and complex-to-real iFFT based on RustFFT
+# realfft
 
-This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft) that enables performing FFT of real-valued data.
+## RealFFT: Real-to-complex forward FFT and complex-to-real inverse FFT based on RustFFT
+
+This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft)
+that enables fast and convenient FFT of real-valued data.
 The API is designed to be as similar as possible to RustFFT.
 
-Using this library instead of RustFFT directly avoids the need of converting real-valued data to complex before performing a FFT.
+Using this library instead of RustFFT directly avoids the need of converting
+real-valued data to complex before performing a FFT.
 If the length is even, it also enables faster computations by using a complex FFT of half the length.
-It then packs a 2N long real vector into an N long complex vector, which is transformed using a standard FFT.
-The FFT result is then post-processed to give only the first half of the complex spectrum, as an N+1 long complex vector.
+It then packs a real-valued signal of length N into an N/2 long complex buffer,
+which is transformed using a standard complex-to-complex FFT.
+The FFT result is then post-processed to give only the first half of the complex spectrum,
+as an N/2+1 long complex vector.
 
-The iFFT goes through the same steps backwards, to transform an N+1 long complex spectrum to a 2N long real result.
+The inverse FFT goes through the same steps backwards,
+to transform a complex spectrum of length N/2+1 to a real-valued signal of length N.
 
-The speed increase compared to just converting the input to a 2N long complex vector
-and using a 2N long FFT depends on the length of the input data.
-The largest improvements are for long FFTs and for lengths over around 1000 elements there is an improvement of about a factor 2.
-The difference shrinks for shorter lengths, and around 30 elements there is no longer any difference.
+The speed increase compared to just converting the input to a length N complex vector
+and using a length N complex-to-complex FFT depends on the length of the input data.
+The largest improvements are for longer FFTs and for lengths over around 1000 elements
+there is an improvement of about a factor 2.
+The difference shrinks for shorter lengths,
+and around 30 elements there is no longer any difference.
 
 ### Why use real-to-complex FFT?
 #### Using a complex-to-complex FFT
-A simple way to get the FFT of a real valued vector is to convert it to complex, and use a complex-to-complex FFT.
+A simple way to transform a real valued signal is to convert it to complex,
+and then use a complex-to-complex FFT.
 
 Let's assume `x` is a 6 element long real vector:
 ```
 x = [x0r, x1r, x2r, x3r, x4r, x5r]
 ```
 
-We now convert `x` to complex by adding an imaginary part with value zero. Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
+We now convert `x` to complex by adding an imaginary part with value zero.
+Using the notation `(xNr, xNi)` for the complex value `xN`, this becomes:
 ```
 x_c = [(x0r, 0), (x1r, 0), (x2r, 0), (x3r, 0), (x4r, 0), (x5r, 0)]
 ```
@@ -44,12 +55,13 @@ As we can see, the output contains 6 independent values, and the rest is redunda
 But it still takes time for the FFT to calculate the redundant values.
 Converting the input data to complex also takes a little bit of time.
 
-If the length of `x` instead had been 7, the result would have been:
+If the length of `x` instead had been 7, result would have been:
 ```
 FFT(x_c) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i), (X3r, -X3i), (X2r, -X2i), (X1r, -X1i)]
 ```
 
-The result is similar, but this time there is no zero at `X3i`. Also in this case we got the same number of independent values as we started with.
+The result is similar, but this time there is no zero at `X3i`.
+Also in this case we got the same number of independent values as we started with.
 
 #### Real-to-complex
 Using a real-to-complex FFT removes the need for converting the input data to complex.
@@ -65,10 +77,15 @@ The result for 7 elements is:
 RealFFT(x) = [(X0r, 0), (X1r, X1i), (X2r, X2i), (X3r, X3i)]
 ```
 
-This is the data layout output by the real-to-complex FFT, and the one expected as input to the complex-to-real iFFT.
+This is the data layout output by the real-to-complex FFT,
+and the one expected as input to the complex-to-real inverse FFT.
 
 ### Scaling
-RealFFT matches the behaviour of RustFFT and does not normalize the output of either FFT of iFFT. To get normalized results, each element must be scaled by `1/sqrt(length)`. If the processing involves both an FFT and an iFFT step, it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
+RealFFT matches the behaviour of RustFFT and does not normalize the output of either forward or inverse FFT.
+To get normalized results, each element must be scaled by `1/sqrt(length)`,
+where `length` is the length of the real-valued signal.
+If the processing involves both an FFT and an iFFT step,
+it is advisable to merge the two normalization steps to a single, by scaling by `1/length`.
 
 ### Documentation
 
@@ -87,7 +104,7 @@ The results are printed while running, and are compiled into an html report cont
 To view, open `target/criterion/report/index.html` in a browser.
 
 ### Example
-Transform a vector, and then inverse transform the result.
+Transform a signal, and then inverse transform the result.
 ```rust
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
@@ -100,26 +117,32 @@ let mut real_planner = RealFftPlanner::<f64>::new();
 
 // create a FFT
 let r2c = real_planner.plan_fft_forward(length);
-// make input and output vectors
+// make a dummy real-valued signal (filled with zeros)
 let mut indata = r2c.make_input_vec();
+// make a vector for storing the spectrum
 let mut spectrum = r2c.make_output_vec();
 
 // Are they the length we expect?
 assert_eq!(indata.len(), length);
 assert_eq!(spectrum.len(), length/2+1);
 
-// Forward transform the input data
+// forward transform the signal
 r2c.process(&mut indata, &mut spectrum).unwrap();
 
-// create an iFFT and an output vector
+// create an inverse FFT
 let c2r = real_planner.plan_fft_inverse(length);
+
+// create a vector for storing the output
 let mut outdata = c2r.make_output_vec();
 assert_eq!(outdata.len(), length);
 
+// inverse transform the spectrum back to a real-valued signal
 c2r.process(&mut spectrum, &mut outdata).unwrap();
 ```
 
-### Versions
+#### Versions
+- 3.3.0: Add method for getting the length of the complex input/output.
+         Bugfix: clean up numerical noise in the zero imaginary components.
 - 3.2.0: Allow scratch buffer to be larger than needed.
 - 3.1.0: Update to RustFFT 6.1 with Neon support.
 - 3.0.2: Fix confusing typos in errors about scratch length.
@@ -130,8 +153,8 @@ c2r.process(&mut spectrum, &mut outdata).unwrap();
 - 1.1.0: Add missing Sync+Send.
 - 1.0.0: First version with new api.
 
+#### Compatibility
 
-### Compatibility
 The `realfft` crate has the same rustc version requirements as RustFFT.
 The minimum rustc version is 1.37 on all platforms except AArch64.
 On AArch64 the minimum rustc version is 1.61.

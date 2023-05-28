@@ -1,9 +1,9 @@
 [package]
 name = "realfft"
-version = "3.2.0"
+version = "3.3.0"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 edition = "2018"
-description = "Real-to-complex FFT and complex-to-real iFFT for Rust"
+description = "Real-to-complex forward FFT and complex-to-real inverse FFT for Rust"
 license = "MIT"
 repository = "https://github.com/HEnquist/realfft"
 keywords = ["fft", "dft", "discrete", "fourier", "transform"]
@@ -16,8 +16,8 @@ readme = "README.md"
 rustfft = "6.1.0"
 
 [dev-dependencies]
-criterion = "0.3"
-rand = "0.8.3"
+criterion = "0.5"
+rand = "0.8.5"
 
 [[bench]]
 name = "realfft"
