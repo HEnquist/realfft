@@ -40,8 +40,12 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # This is needed since recent criterion versions don't build on 1.37
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
       - name: Run cargo check
-        run: cargo check
+        run: cargo hack check --no-dev-deps
 
   fmt:
     name: Rustfmt
