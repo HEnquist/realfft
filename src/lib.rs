@@ -905,7 +905,7 @@ impl<T: FftNum> ComplexToReal<T> for ComplexToRealEven<T> {
             std::slice::from_raw_parts_mut(ptr, len / 2)
         };
         self.fft
-            .process_outofplace_with_scratch(&mut input[..output.len() / 2], buf_out, scratch);
+            .process_outofplace_with_scratch(&mut input[..buf_out.len()], buf_out, scratch);
         if first_invalid || last_invalid {
             return Err(FftError::InputValues(first_invalid, last_invalid));
         }
