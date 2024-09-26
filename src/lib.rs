@@ -139,6 +139,8 @@
 //! ```
 //!
 //! ### Versions
+//! - 3.4.0: Fix undefined behavior reported by Miri.
+//!          Update to latest RustFFT.
 //! - 3.3.0: Add method for getting the length of the complex input/output.
 //!          Bugfix: clean up numerical noise in the zero imaginary components.
 //! - 3.2.0: Allow scratch buffer to be larger than needed.
@@ -154,8 +156,7 @@
 //! ### Compatibility
 //!
 //! The `realfft` crate has the same rustc version requirements as RustFFT.
-//! The minimum rustc version is 1.37 on all platforms except AArch64.
-//! On AArch64 the minimum rustc version is 1.61.
+//! The minimum rustc version is 1.61.
 
 pub use rustfft::num_complex;
 pub use rustfft::num_traits;
