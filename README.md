@@ -4,7 +4,8 @@
 
 This library is a wrapper for [RustFFT](https://crates.io/crates/rustfft)
 that enables fast and convenient FFT of real-valued data.
-The API is designed to be as similar as possible to RustFFT.
+The API is designed to be as similar as possible to RustFFT. Also, the feature flags are passed
+on to RustFFT, allowing selection of its features – they do not affect RealFFT itself.
 
 Using this library instead of RustFFT directly avoids the need of converting
 real-valued data to complex before performing a FFT.
