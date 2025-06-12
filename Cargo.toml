@@ -12,8 +12,17 @@ readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# Map RealFFT's features one-to-one with RustFFT's. For more information, refer
+# to the Feature Flags section at https://docs.rs/rustfft/latest/rustfft/
+default = ["rustfft/default"]
+avx = ["rustfft/avx"]
+sse = ["rustfft/sse"]
+neon = ["rustfft/neon"]
+wasm_simd = ["rustfft/wasm_simd"]
+
 [dependencies]
-rustfft = "6.2.0"
+rustfft = { version = "6.2.0", default-features = false }
 
 [dev-dependencies]
 criterion = "0.3"
