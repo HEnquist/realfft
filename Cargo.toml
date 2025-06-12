@@ -1,6 +1,6 @@
 [package]
 name = "realfft"
-version = "3.4.0"
+version = "3.5.0"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 edition = "2018"
 description = "Real-to-complex forward FFT and complex-to-real inverse FFT for Rust"
@@ -22,11 +22,11 @@ neon = ["rustfft/neon"]
 wasm_simd = ["rustfft/wasm_simd"]
 
 [dependencies]
-rustfft = { version = "6.2.0", default-features = false }
+rustfft = { version = "6.4.0", default-features = false }
 
 [dev-dependencies]
-criterion = "0.3"
-rand = "0.8.5"
+criterion = "0.6"
+rand = "0.9"
 
 [[bench]]
 name = "realfft"
