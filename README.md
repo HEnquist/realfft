@@ -149,6 +149,8 @@ See the [RustFFT documentation](https://docs.rs/rustfft/latest/rustfft/#feature-
 for more details.
 
 ## Versions
+- 3.5.1
+  - Add the missing license file.
 - 3.5.0
   - Add cargo features to set the corresponding RustFFT features.
 - 3.4.0
