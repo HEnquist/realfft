@@ -1,6 +1,6 @@
 [package]
 name = "realfft"
-version = "3.5.0"
+version = "3.5.1"
 authors = ["HEnquist <henrik.enquist@gmail.com>"]
 edition = "2018"
 description = "Real-to-complex forward FFT and complex-to-real inverse FFT for Rust"
